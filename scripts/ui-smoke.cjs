@@ -46,6 +46,18 @@ app.whenReady().then(async () => {
         `(() => { const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right};};return {view:document.body.dataset.view,width:innerWidth,bodyWidth:document.body.scrollWidth,calendar:rect('#calendar'),toolbar:rect('.planner-toolbar'),events:[...document.querySelectorAll('.event')].map(e=>({width:e.clientWidth,scrollWidth:e.scrollWidth,title:e.querySelector('strong').textContent})),dates:document.querySelectorAll('.date-choice').length}; })()`,
       );
       assert.equal(layout.view, view);
+      assert.equal(
+        await win.webContents.executeJavaScript("document.body.dataset.demo"),
+        "true",
+      );
+      assert.equal(
+        await win.webContents.executeJavaScript(
+          'new Date().getFullYear()+"-"+(new Date().getMonth()+1)',
+        ),
+        "2026-5",
+      );
+      for (const event of layout.events)
+        assert.ok(event.title.startsWith("Demo · "));
       console.log(name + " " + JSON.stringify(layout));
       assert.equal(layout.dates, 15);
       assert.equal(

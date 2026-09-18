@@ -42,6 +42,15 @@ for (const entry of fs.readdirSync("node_modules", { withFileTypes: true })) {
 }
 fs.writeFileSync("dist/THIRD_PARTY_NOTICES.txt", notices);
 fs.mkdirSync("release", { recursive: true });
-fs.copyFileSync("docs/USAGE.md", "release/使用说明.md");
-fs.copyFileSync("docs/DEVELOPMENT.md", "release/开发指引.md");
+function releaseDoc(source, destination) {
+  const content = fs
+    .readFileSync(source, "utf8")
+    .replace(
+      /\]\((DEVELOPMENT|USAGE|ARCHITECTURE|CHANGELOG)\.md\)/g,
+      "](../docs/$1.md)",
+    );
+  fs.writeFileSync(destination, content);
+}
+releaseDoc("docs/USAGE.md", "release/使用说明.md");
+releaseDoc("docs/DEVELOPMENT.md", "release/开发指引.md");
 fs.copyFileSync("docs/CHANGELOG.md", "release/更新说明.md");

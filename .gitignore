@@ -1,7 +1,14 @@
 node_modules/
 dist/
 env/
-release/
+release/*
+!release/*.md
+!release/界面预览/
+release/界面预览/*
+!release/界面预览/demo/
+release/界面预览/demo/*
+!release/界面预览/demo/*.png
+!release/界面预览/demo/*.md
 *.log
 
 # Credentials, signing keys and personal data must never become public source.
