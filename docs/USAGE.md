@@ -6,10 +6,10 @@
 
 前往 [GitHub Releases](https://github.com/GoesM/J-Personal-Schedule-APP/releases/latest)，在 Assets 中下载对应文件，**不必下载 Source code，也不必配置开发环境**。
 
-| 平台    | 下载与运行                                                      | 要求                                        |
-| ------- | --------------------------------------------------------------- | ------------------------------------------- |
-| Windows | 下载 `J人小程序-版本号-win.zip`，完整解压后双击 `J人小程序.exe` | Windows 10/11，x64                          |
-| Android | 下载 `J人小程序-Android.apk`，复制到手机并安装                  | Android 8.0+，较新的 Android System WebView |
+| 平台    | 下载与运行                                                                | 要求                                        |
+| ------- | ------------------------------------------------------------------------- | ------------------------------------------- |
+| Windows | 下载 `J-Personal-Schedule-版本号-win.zip`，完整解压后双击 `J人小程序.exe` | Windows 10/11，x64                          |
+| Android | 下载 `J-Personal-Schedule-Android.apk`，复制到手机并安装                  | Android 8.0+，较新的 Android System WebView |
 
 客户端内置 Git 引擎，使用时无需另装 Git、Node 或 Java。Windows 包请保留全部文件，不要单独复制 EXE。当前 Windows 发行包没有可信发布者代码签名，可能出现未知发布者提示；请确认来源是本仓库官方 Releases，不要关闭系统安全防护。
 
