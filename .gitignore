@@ -1,0 +1,22 @@
+node_modules/
+dist/
+env/
+release/
+*.log
+
+# Credentials, signing keys and personal data must never become public source.
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pfx
+settings.enc
+password.txt
+repo/
+data/
+profiles/
+
+# One-off verification helpers for the author's private data repository.
+scripts/cloud-check.mjs
+scripts/cloud-cleanup.mjs

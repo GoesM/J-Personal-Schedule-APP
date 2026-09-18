@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'"
+    />
+    <title>J人小程序</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <button id="menu-backdrop" aria-label="关闭更多菜单"></button>
+    <aside class="sidebar" aria-label="工具与设置">
+      <div class="brand">
+        <span class="brand-icon">J</span>
+        <div>
+          <h1>J人小程序</h1>
+          <p>把每一天，安排得刚刚好。</p>
+        </div>
+        <button id="menu-close" aria-label="关闭菜单">×</button>
+      </div>
+      <div id="summary"></div>
+      <p class="eyebrow tools-title">我的工具</p>
+      <nav class="tools">
+        <button id="settings"><span>⚙</span>设置与同步配置</button
+        ><button id="help"><span>?</span>操作指南</button
+        ><button id="backup"><span>↓</span>导出备份</button
+        ><label class="button"
+          ><span>↑</span>导入备份<input
+            type="file"
+            id="import"
+            accept=".json"
+            hidden /></label
+        ><button id="trash"><span>↺</span>回收站</button
+        ><button id="conflicts">版本冲突 (0)</button>
+        <button id="quit"><span>↗</span>退出程序</button>
+      </nav>
+      <section class="legend">
+        <p class="eyebrow">颜色说明 / 格式参考</p>
+        <span class="future">未到期 TODO / 日程</span
+        ><span class="done">已完成（包括当天）</span
+        ><span class="past">已过期 · 未完成</span
+        ><span class="important">未来 · 重要事项</span>
+      </section>
+      <p class="sidebar-note">离线也能安心记录<br />同步由你掌控</p>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="page-title">
+          <span class="eyebrow">J人小程序 · PERSONAL PLANNER</span>
+          <h2 id="period-title"></h2>
+        </div>
+        <div class="header-actions">
+          <button
+            id="search-toggle"
+            aria-label="展开搜索"
+            aria-expanded="false"
+          >
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="10.5"
+                cy="10.5"
+                r="6.5"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <path
+                d="m15.5 15.5 5 5"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+          <button id="sync" class="sync-button" aria-label="与云端同步">
+            ↻ <span>与云端同步</span></button
+          ><button id="menu" aria-label="更多工具" aria-expanded="false">
+            •••</button
+          ><button id="add" class="primary">＋ 新建</button>
+        </div>
+      </header>
+      <section class="planner-toolbar">
+        <div class="date-controls">
+          <button id="today">今日</button
+          ><button id="prev" class="arrow" aria-label="上一周">‹</button
+          ><input type="date" id="center" aria-label="选择日期" /><button
+            id="next"
+            class="arrow"
+            aria-label="下一周"
+          >
+            ›
+          </button>
+        </div>
+        <div class="view-switch" aria-label="视图切换">
+          <button id="view-week" aria-pressed="false">七日</button
+          ><button id="view-range" aria-pressed="false">十五日</button
+          ><button id="view-agenda" aria-pressed="false">单日</button>
+        </div>
+        <input
+          type="search"
+          id="search"
+          placeholder="搜索事项…"
+          aria-label="搜索标题、地点、备注"
+        />
+      </section>
+      <div id="date-nav"></div>
+      <p id="status" role="status" aria-live="polite"></p>
+      <main id="calendar" aria-label="日程与待办"></main>
+    </div>
+    <dialog id="dialog">
+      <form id="form">
+        <h2 id="formTitle"></h2>
+        <section id="fields"></section>
+        <footer>
+          <button type="button" id="cancel">取消</button
+          ><button type="submit" class="primary">保存</button>
+        </footer>
+      </form>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>

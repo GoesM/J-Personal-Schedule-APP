@@ -1,0 +1,46 @@
+{
+  "name": "j-personal-schedule",
+  "version": "1.2.0",
+  "private": true,
+  "description": "离线优先、多设备 Git 同步的个人日程与 TODO",
+  "author": "GoesM",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node --test tests/*.test.mjs",
+    "format": "prettier --write src desktop scripts tests docs README.md package.json && prettier --write android/**/*.java --plugin=prettier-plugin-java",
+    "start": "electron .",
+    "package:win": "npm run build && electron-builder --win dir zip",
+    "package:android": "npm run build && node scripts/android.cjs"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "isomorphic-git": "1.42.2"
+  },
+  "devDependencies": {
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.7",
+    "prettier-plugin-java": "^2.10.3"
+  },
+  "build": {
+    "appId": "cn.goesm.jcalendar",
+    "productName": "J人小程序",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**",
+      "dist/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "dir",
+        "zip"
+      ]
+    }
+  }
+}
