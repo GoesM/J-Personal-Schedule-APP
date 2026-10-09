@@ -1,4 +1,5 @@
 import { materialize } from "./model.mjs";
+import { createLongStore } from "./long-store.mjs";
 const bridge = window.native;
 export const call = async (method, ...args) => {
   try {
@@ -62,7 +63,31 @@ export const hasActiveWrites = () => writes > 0;
 export const freeze = (value) => {
   frozen = value;
 };
-export const records = () => materialize(operations);
+const longStore = createLongStore({
+  readJson: async (path) =>
+    JSON.parse(new TextDecoder().decode(from64(await call("read", path)))),
+  writeJson: async (path, data) =>
+    call(
+      "write",
+      path,
+      bytesTo64(new TextEncoder().encode(JSON.stringify(data))),
+    ),
+  list: (path) => call("list", path),
+  mkdir: (path) => call("mkdir", path),
+});
+export const records = () => [
+  ...materialize(operations),
+  ...longStore.records(),
+];
+export const longRecords = () => longStore.records();
+export const loadLongTrash = () => longStore.loadTrash();
+export async function exportBackup() {
+  return {
+    format: "j-schedule-v2",
+    operations,
+    longTodoHeads: await longStore.exportHeads(),
+  };
+}
 function validate(o) {
   if (
     !o ||
@@ -102,11 +127,14 @@ export async function load() {
       }
     }
   operations = next;
+  await longStore.load();
 }
 export async function save(item, previous, deleted = false) {
   if (frozen) throw Error("同步中，请完成后再保存");
   writes++;
   try {
+    if (item.kind === "longtodo")
+      return await longStore.save(item, previous, deleted);
     const id = crypto.randomUUID();
     const op = {
       id,
@@ -123,6 +151,15 @@ export async function save(item, previous, deleted = false) {
     );
     operations.push(op);
     return op;
+  } finally {
+    writes--;
+  }
+}
+export async function importLongHeads(list) {
+  if (frozen) throw Error("同步中，请完成后再导入");
+  writes++;
+  try {
+    await longStore.importHeads(list);
   } finally {
     writes--;
   }

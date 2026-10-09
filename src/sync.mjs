@@ -15,8 +15,9 @@ export async function hasPendingChanges(settings) {
     initialized = false;
   }
   if (!initialized)
-    return (await fs.promises.readdir(dir + "/ops")).some((n) =>
-      n.endsWith(".json"),
+    return (
+      (await fs.promises.readdir(dir + "/longtodo")).length > 0 ||
+      (await fs.promises.readdir(dir + "/ops")).some((n) => n.endsWith(".json"))
     );
   const matrix = await git.statusMatrix({ fs, dir });
   if (matrix.some(([, h, w, s]) => h !== w || h !== s)) return true;
@@ -97,6 +98,7 @@ export async function synchronize(settings, push = true) {
     if (branch !== (settings.branch || "main"))
       throw Error("此数据目录的分支为 " + branch + "，请恢复设置中的分支");
     await git.add({ fs, dir, filepath: "ops" });
+    await git.add({ fs, dir, filepath: "longtodo" });
     const matrix = await git.statusMatrix({ fs, dir });
     const dirty = matrix.some(([, h, w, s]) => h !== w || h !== s);
     const author = {

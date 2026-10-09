@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="cn.goesm.jcalendar" android:versionCode="4" android:versionName="1.2.0">
+    package="cn.goesm.jcalendar" android:versionCode="5" android:versionName="1.3.0">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="J人小程序"

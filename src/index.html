@@ -40,6 +40,14 @@
         ><button id="conflicts">版本冲突 (0)</button>
         <button id="quit"><span>↗</span>退出程序</button>
       </nav>
+      <div class="global-search">
+        <input
+          type="search"
+          id="search"
+          placeholder="搜索日程、TODO、长期TODO…"
+          aria-label="搜索标题、地点、备注"
+        />
+      </div>
       <section class="legend">
         <p class="eyebrow">颜色说明 / 格式参考</p>
         <span class="future">未到期 TODO / 日程</span
@@ -90,33 +98,37 @@
           ><button id="add" class="primary">＋ 新建</button>
         </div>
       </header>
-      <section class="planner-toolbar">
-        <div class="date-controls">
-          <button id="today">今日</button
-          ><button id="prev" class="arrow" aria-label="上一周">‹</button
-          ><input type="date" id="center" aria-label="选择日期" /><button
-            id="next"
-            class="arrow"
-            aria-label="下一周"
-          >
-            ›
-          </button>
-        </div>
-        <div class="view-switch" aria-label="视图切换">
-          <button id="view-week" aria-pressed="false">七日</button
-          ><button id="view-range" aria-pressed="false">十五日</button
-          ><button id="view-agenda" aria-pressed="false">单日</button>
-        </div>
-        <input
-          type="search"
-          id="search"
-          placeholder="搜索事项…"
-          aria-label="搜索标题、地点、备注"
-        />
-      </section>
-      <div id="date-nav"></div>
-      <p id="status" role="status" aria-live="polite"></p>
-      <main id="calendar" aria-label="日程与待办"></main>
+      <nav class="mobile-pages" aria-label="页面切换">
+        <button id="page-daily" aria-pressed="true">每日安排</button>
+        <button id="page-long" aria-pressed="false">
+          长期 TODO <span id="long-badge">0</span>
+        </button>
+      </nav>
+      <div class="planner-layout">
+        <section class="daily-pane" aria-label="每日安排">
+          <section class="planner-toolbar">
+            <div class="date-controls">
+              <button id="today">今日</button
+              ><button id="prev" class="arrow" aria-label="上一周">‹</button
+              ><input type="date" id="center" aria-label="选择日期" /><button
+                id="next"
+                class="arrow"
+                aria-label="下一周"
+              >
+                ›
+              </button>
+            </div>
+            <div class="view-switch" aria-label="视图切换">
+              <button id="view-week" aria-pressed="false">七日</button
+              ><button id="view-agenda" aria-pressed="false">单日</button>
+            </div>
+          </section>
+          <div id="date-nav"></div>
+          <p id="status" role="status" aria-live="polite"></p>
+          <main id="calendar" aria-label="日程与待办"></main>
+        </section>
+        <aside id="long-pane" aria-label="长期TODO清单"></aside>
+      </div>
     </div>
     <dialog id="dialog">
       <form id="form">
@@ -128,6 +140,20 @@
         </footer>
       </form>
     </dialog>
+    <div
+      id="sync-overlay"
+      class="sync-overlay"
+      role="status"
+      aria-live="polite"
+      aria-label="正在与云端同步"
+      hidden
+    >
+      <section class="sync-progress" aria-describedby="sync-progress-detail">
+        <span class="sync-spinner" aria-hidden="true"></span>
+        <strong id="sync-progress-title">正在与云端同步</strong>
+        <span id="sync-progress-detail">请稍候，完成后即可继续操作</span>
+      </section>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>

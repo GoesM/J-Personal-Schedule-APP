@@ -65,6 +65,12 @@ test("真实表单入口：新建→日程，TODO加号→无时间TODO，类型
           return;
         case "write":
           files.set(p, v);
+          for (
+            let dir = p.slice(0, p.lastIndexOf("/"));
+            dir;
+            dir = dir.slice(0, dir.lastIndexOf("/"))
+          )
+            dirs.add(dir);
           return;
         case "ready":
           markReady();
@@ -95,6 +101,12 @@ test("真实表单入口：新建→日程，TODO加号→无时间TODO，类型
     await until(() => !$("#dialog").open);
   }
   try {
+    assert.equal($("#sync-overlay").hidden, true);
+    $("#sync").click();
+    assert.equal($("#sync-overlay").hidden, false);
+    assert.equal(w.document.body.getAttribute("aria-busy"), "true");
+    await until(() => $("#sync-overlay").hidden);
+    assert.equal(w.document.body.hasAttribute("aria-busy"), false);
     assert.equal(w.document.querySelectorAll(".add-schedule").length, 7);
     const targetDate = $("#center").value;
     $(
@@ -141,7 +153,7 @@ test("真实表单入口：新建→日程，TODO加号→无时间TODO，类型
     assert.equal(w.document.querySelectorAll(".todo").length, 1);
     assert.equal(w.document.querySelectorAll(".event").length, 1);
     assert.equal($(".grid").dataset.columns, "7");
-    assert.equal(w.document.querySelectorAll(".date-choice").length, 15);
+    assert.equal(w.document.querySelectorAll(".date-choice").length, 7);
     // Auto layout swaps to a genuinely single-day mobile agenda, not a scaled grid.
     w.innerWidth = 390;
     w.dispatchEvent(new w.Event("resize"));
@@ -175,13 +187,61 @@ test("真实表单入口：新建→日程，TODO加号→无时间TODO，类型
     w.dispatchEvent(new w.Event("resize"));
     await until(() => w.document.body.dataset.view === "week");
     assert.equal($(".grid").dataset.columns, "7");
-    $("#view-range").click();
-    assert.equal($(".grid").dataset.columns, "15");
+    assert.equal($("#view-range"), null);
     $("#view-agenda").click();
     assert.ok($(".agenda"));
-    const ops = [...files.values()].map((s) =>
-      JSON.parse(Buffer.from(s, "base64").toString()),
-    );
+    // Third category: optional DDL, separate list, quick completion and mobile page.
+    $(".add-long").click();
+    assert.equal(input("entryType").value, "longtodo");
+    assert.equal(input("date").disabled, true);
+    assert.equal(input("ddl").required, false);
+    input("notes").value = "长期备注";
+    await submit("长期目标");
+    assert.equal(w.document.querySelectorAll(".long-card").length, 1);
+    assert.equal($("#long-badge").textContent, "1");
+    assert.match($(".long-group:nth-of-type(2)").textContent, /长期目标/);
+    $(".long-card .check-toggle").click();
+    await until(() => $(".long-completed .long-card"));
+    assert.equal($(".long-completed").open, false);
+    assert.equal($("#long-badge").textContent, "0");
+    $(".long-completed .check-toggle").click();
+    await until(() => $("#long-badge").textContent === "1");
+    w.innerWidth = 390;
+    w.dispatchEvent(new w.Event("resize"));
+    await until(() => w.document.body.dataset.view === "agenda");
+    $("#page-long").click();
+    assert.equal(w.document.body.dataset.page, "long");
+    assert.equal($("#page-long").getAttribute("aria-pressed"), "true");
+    $("#add").click();
+    assert.equal(input("entryType").value, "longtodo");
+    $("#cancel").click();
+    $("#page-daily").click();
+    assert.equal(w.document.body.dataset.page, "daily");
+    // Advancing the local day expires the seven-day completion window without
+    // destroying a draft in the editor (focus/visibility hooks run on resume).
+    $(".long-card .check-toggle").click();
+    await until(() => $("#long-badge").textContent === "0");
+    $(".add-long").click();
+    input("title").value = "保留跨日草稿";
+    const RealDate = w.Date;
+    w.Date = class extends RealDate {
+      constructor(...args) {
+        super(...(args.length ? args : [RealDate.now() + 7 * 86400000]));
+      }
+      static now() {
+        return RealDate.now() + 7 * 86400000;
+      }
+    };
+    w.dispatchEvent(new w.Event("focus"));
+    assert.equal($(".long-completed .long-card"), null);
+    assert.equal(input("title").value, "保留跨日草稿");
+    assert.equal($("#dialog").open, true);
+    w.Date = RealDate;
+    w.dispatchEvent(new w.Event("focus"));
+    $("#cancel").click();
+    const ops = [...files.entries()]
+      .filter(([p]) => p.startsWith("/repo/ops/"))
+      .map(([, s]) => JSON.parse(Buffer.from(s, "base64").toString()));
     assert.ok(
       ops.some((o) => o.item.kind === "schedule" && o.item.start === "13:20"),
     );

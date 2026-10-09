@@ -4,14 +4,17 @@ import {
   load,
   records,
   save,
-  operations,
   importOps,
+  importLongHeads,
+  exportBackup,
+  loadLongTrash,
   hasActiveWrites,
   freeze,
 } from "./store.mjs";
 import { synchronize, hasPendingChanges } from "./sync.mjs";
 import { createExitController } from "./exit.mjs";
 import { itemFromForm } from "./item-form.mjs";
+import { longTodoList } from "./long-view.mjs";
 import {
   dateStrip,
   agenda,
@@ -36,9 +39,12 @@ let settings = {},
   viewPreference = "auto",
   editing = null,
   mode = "item",
-  locked = false;
+  locked = false,
+  page = "daily",
+  completedOpen = false;
 let initialized = false,
-  pendingActions = 0;
+  pendingActions = 0,
+  renderedDay = localDate();
 const text = (tag, value, cls) => {
   const e = document.createElement(tag);
   e.textContent = value;
@@ -80,27 +86,53 @@ function editor(
   editing = r;
   dialog(r ? "编辑事项" : "新建事项", "item");
   field("title", "标题", item.title).required = true;
-  field("date", "日期", item.date, "date").required = true;
+  const date = field("date", "日期", item.date || selected, "date");
   const typeLabel = text("label", "事项类型", "field");
   const entryType = document.createElement("select");
   entryType.name = "entryType";
   for (const [value, label] of [
-    ["schedule", "日程（有时间范围）"],
-    ["todo", "TODO（只有日期）"],
+    ["schedule", "日程"],
+    ["todo", "单日 TODO"],
+    ["longtodo", "长期 TODO"],
   ]) {
     const option = text("option", label);
     option.value = value;
+    // The two stores preserve different causal histories. A copy can choose any
+    // category; existing items stay in their original store.
+    if (r && (item.kind === "longtodo") !== (value === "longtodo"))
+      option.disabled = true;
     entryType.append(option);
   }
-  entryType.value = item.start ? "schedule" : "todo";
+  entryType.value =
+    item.kind === "longtodo" ? "longtodo" : item.start ? "schedule" : "todo";
   typeLabel.append(entryType);
   $("fields").append(typeLabel);
   const start = field("start", "开始时间", item.start || "09:00", "time");
   const end = field("end", "结束时间", item.end || "10:00", "time");
-  field("location", "地点", item.location);
+  const ddl = field("ddl", "DDL / 截止日期（可不填）", item.ddl, "date");
+  const location = field("location", "地点", item.location);
   field("notes", "备注", item.notes, "textarea");
   const updateType = () => {
     const scheduled = entryType.value === "schedule";
+    const long = entryType.value === "longtodo";
+    $("formTitle").textContent =
+      (r ? "编辑" : "新建") +
+      (long ? "长期 TODO" : scheduled ? "日程" : "单日 TODO");
+    $("fields").querySelector(
+      '[name="title"]',
+    ).parentElement.firstChild.nodeValue = long ? "待办内容" : "标题";
+    date.disabled = long;
+    date.required = !long;
+    date.parentElement.hidden = long;
+    ddl.disabled = !long;
+    ddl.parentElement.hidden = !long;
+    location.disabled = long;
+    location.parentElement.hidden = long;
+    const repeat = $("fields").querySelector('[name="repeat"]');
+    if (repeat) {
+      repeat.disabled = long;
+      repeat.parentElement.hidden = long;
+    }
     for (const input of [start, end]) {
       input.disabled = !scheduled;
       input.parentElement.hidden = !scheduled;
@@ -118,7 +150,9 @@ function editor(
   field("important", "重要", item.important, "checkbox");
   field("done", "已完成", item.done, "checkbox");
   if (!r) {
-    field("repeat", "每周重复次数（1–52）", 1, "number").max = 52;
+    const repeat = field("repeat", "每周重复次数（1–52）", 1, "number");
+    repeat.min = 1;
+    repeat.max = 52;
   } else {
     const actions = text("div", "", "actions");
     for (const [label, fn] of [
@@ -154,6 +188,7 @@ function editor(
         ),
       );
   }
+  updateType();
 }
 const currentView = () =>
   viewPreference === "auto"
@@ -166,25 +201,26 @@ function closeMenu() {
   $("menu").setAttribute("aria-expanded", "false");
 }
 function render() {
+  renderedDay = localDate();
   const all = records(),
-    visible = all.filter((r) => !r.deleted),
+    visible = all.filter((r) => !r.deleted && r.item.kind !== "longtodo"),
     view = currentView();
   document.body.dataset.view = view;
+  document.body.dataset.page = page;
   $("center").value = selected;
   $("period-title").textContent =
-    Number(selected.slice(0, 4)) + "年 " + Number(selected.slice(5, 7)) + "月";
+    window.innerWidth < 760 && page === "long"
+      ? "长期 TODO"
+      : Number(selected.slice(0, 4)) +
+        "年 " +
+        Number(selected.slice(5, 7)) +
+        "月";
   $("conflicts").textContent =
     "版本冲突 (" + all.filter((r) => r.conflict).length + ")";
-  for (const v of ["week", "range", "agenda"])
+  for (const v of ["week", "agenda"])
     $("view-" + v).setAttribute("aria-pressed", String(view === v));
-  $("prev").setAttribute(
-    "aria-label",
-    view === "agenda" ? "前一天" : view === "week" ? "上一周" : "前十五天",
-  );
-  $("next").setAttribute(
-    "aria-label",
-    view === "agenda" ? "后一天" : view === "week" ? "下一周" : "后十五天",
-  );
+  $("prev").setAttribute("aria-label", view === "agenda" ? "前一天" : "上一周");
+  $("next").setAttribute("aria-label", view === "agenda" ? "后一天" : "下一周");
   const query = $("search").value.toLowerCase();
   const items = visible.filter((r) =>
     JSON.stringify(r.item).toLowerCase().includes(query),
@@ -195,10 +231,17 @@ function render() {
     render();
     focusToday();
   };
-  $("date-nav").replaceChildren(dateStrip(center, selected, onSelect, visible));
+  $("date-nav").replaceChildren(
+    dateStrip(
+      view === "week" ? selected : center,
+      selected,
+      onSelect,
+      visible,
+      view,
+    ),
+  );
   $("summary").replaceChildren(sidebarSummary(selected, visible));
   const options = {
-    anchor: center,
     selected,
     view,
     items,
@@ -206,7 +249,8 @@ function render() {
     onEdit: editor,
     timelineHeight: Math.max(
       280,
-      ($("calendar").clientHeight || window.innerHeight - 245) - 250,
+      (document.querySelector(".daily-pane").clientHeight ||
+        window.innerHeight - 100) - 480,
     ),
     onNew: (date, timed) =>
       editor({
@@ -217,18 +261,40 @@ function render() {
         end: timed ? "10:00" : "",
       }),
     onToggle: async (r) => {
-      if (locked) return;
+      if (locked || pendingActions) return;
+      pendingActions++;
       try {
         await save({ ...r.item, done: !r.item.done }, r);
         render();
         status("完成状态已保存");
       } catch (e) {
         status(e.message);
+      } finally {
+        pendingActions--;
       }
     },
   };
   $("calendar").replaceChildren(
     view === "agenda" ? agenda(options) : overview(options),
+  );
+  const longItems = all.filter((r) => r.item.kind === "longtodo");
+  $("long-badge").textContent = String(
+    longItems.filter((r) => !r.deleted && !r.item.done).length,
+  );
+  for (const p of ["daily", "long"])
+    $("page-" + p).setAttribute("aria-pressed", String(page === p));
+  $("long-pane").replaceChildren(
+    longTodoList({
+      items: longItems,
+      query,
+      onEdit: editor,
+      onToggle: options.onToggle,
+      onNew: () => editor({ title: "", kind: "longtodo", ddl: "", notes: "" }),
+      completedOpen,
+      onCompletedToggle: (open) => {
+        completedOpen = open;
+      },
+    }),
   );
   if (query) {
     const results = visible
@@ -259,6 +325,9 @@ $("form").onsubmit = async (e) => {
   try {
     const f = new FormData(e.target);
     if (mode === "settings") {
+      const oldBinding =
+        (settings.url || "") + "\n" + (settings.branch || "main");
+      const longHeads = (await exportBackup()).longTodoHeads;
       settings = {
         url: String(f.get("url")).trim(),
         user: String(f.get("user")).trim(),
@@ -267,13 +336,19 @@ $("form").onsubmit = async (e) => {
       };
       await call("saveSettings", settings);
       await load();
+      if (oldBinding !== (settings.url || "") + "\n" + settings.branch)
+        await importLongHeads(longHeads);
     } else if (mode === "item") {
       const i = itemFromForm(f);
-      const repeat = editing ? 1 : Number(f.get("repeat") || 1);
+      const repeat =
+        editing || i.kind === "longtodo" ? 1 : Number(f.get("repeat") || 1);
       if (!Number.isInteger(repeat) || repeat < 1 || repeat > 52)
         throw Error("重复次数为1–52");
       for (let n = 0; n < repeat; n++)
-        await save({ ...i, date: shift(i.date, n * 7) }, editing);
+        await save(
+          i.kind === "longtodo" ? i : { ...i, date: shift(i.date, n * 7) },
+          editing,
+        );
     }
     $("dialog").close();
     render();
@@ -285,23 +360,24 @@ $("form").onsubmit = async (e) => {
   }
 };
 $("cancel").onclick = () => $("dialog").close();
-$("add").onclick = () => editor();
+$("add").onclick = () =>
+  page === "long" && window.innerWidth < 760
+    ? editor({ title: "", kind: "longtodo", ddl: "", notes: "" })
+    : editor();
 $("today").onclick = () => {
   center = selected = localDate();
   render();
   focusToday();
 };
 $("prev").onclick = () => {
-  const step =
-    currentView() === "agenda" ? 1 : currentView() === "week" ? 7 : 15;
+  const step = currentView() === "agenda" ? 1 : 7;
   selected = shift(selected, -step);
   center = selected;
   render();
   focusToday();
 };
 $("next").onclick = () => {
-  const step =
-    currentView() === "agenda" ? 1 : currentView() === "week" ? 7 : 15;
+  const step = currentView() === "agenda" ? 1 : 7;
   selected = shift(selected, step);
   center = selected;
   render();
@@ -324,12 +400,23 @@ $("search-toggle").onclick = () => {
     render();
   }
 };
-for (const view of ["week", "range", "agenda"])
+for (const view of ["week", "agenda"])
   $("view-" + view).onclick = () => {
     viewPreference = view;
     render();
     focusToday();
   };
+for (const p of ["daily", "long"])
+  $("page-" + p).onclick = () => {
+    page = p;
+    render();
+  };
+for (const button of document.querySelectorAll(".tools button,.tools label")) {
+  button.title = button.textContent.trim();
+  button.setAttribute("aria-label", button.textContent.trim());
+}
+for (const swatch of document.querySelectorAll(".legend span"))
+  swatch.title = swatch.textContent;
 $("menu").onclick = () => {
   document.body.classList.toggle("menu-open");
   $("menu").setAttribute(
@@ -370,6 +457,14 @@ async function sync(push = true, throwOnFailure = false) {
   if (locked) throw Error("正在同步，请稍候");
   locked = true;
   $("sync").disabled = true;
+  $("sync-overlay").hidden = false;
+  $("sync-progress-title").textContent = push
+    ? "正在与云端同步"
+    : "正在更新日程";
+  $("sync-progress-detail").textContent = push
+    ? "正在保存、拉取并上传，请稍候"
+    : "正在拉取云端最新内容，请稍候";
+  document.body.setAttribute("aria-busy", "true");
   status(push ? "正在保存、拉取、推送…" : "启动时拉取远端…");
   try {
     status(await synchronize(settings, push));
@@ -380,6 +475,8 @@ async function sync(push = true, throwOnFailure = false) {
   } finally {
     locked = false;
     $("sync").disabled = false;
+    $("sync-overlay").hidden = true;
+    document.body.removeAttribute("aria-busy");
   }
 }
 $("sync").onclick = () => sync();
@@ -415,8 +512,14 @@ if (window.native.exitTesting)
 $("quit").onclick = requestExit;
 // Refresh fills without rebuilding the view or losing an open editor/scroll position.
 function refreshColors() {
+  // Crossing midnight also advances the seven-day completed window and today
+  // markers. The editor is outside the view containers and keeps its draft.
+  if (renderedDay !== localDate()) {
+    render();
+    return;
+  }
   const map = new Map(records().map((r) => [r.id, r.item]));
-  for (const card of document.querySelectorAll(".event,.todo")) {
+  for (const card of document.querySelectorAll(".event,.todo,.long-card")) {
     const item = map.get(card.dataset.itemId);
     if (!item) continue;
     card.classList.remove("course", "future", "important", "past", "done");
@@ -432,7 +535,7 @@ $("backup").onclick = async () => {
   try {
     const exported = await call(
       "export",
-      JSON.stringify({ format: "j-schedule-v1", operations }, null, 2),
+      JSON.stringify(await exportBackup(), null, 2),
     );
     status(exported ? "备份已导出" : "已取消导出");
   } catch (e) {
@@ -442,12 +545,20 @@ $("backup").onclick = async () => {
 $("import").onchange = async (e) => {
   try {
     const data = JSON.parse(await e.target.files[0].text());
-    if (data.format !== "j-schedule-v1" || !Array.isArray(data.operations))
+    if (
+      !["j-schedule-v1", "j-schedule-v2"].includes(data.format) ||
+      !Array.isArray(data.operations)
+    )
       throw Error("不支持的备份格式");
     if (
       confirm("导入 " + data.operations.length + " 条历史记录？同ID不会重复。")
     ) {
       await importOps(data.operations);
+      if (data.format === "j-schedule-v2") {
+        if (!Array.isArray(data.longTodoHeads))
+          throw Error("长期TODO备份格式不正确");
+        await importLongHeads(data.longTodoHeads);
+      }
       render();
     }
   } catch (err) {
@@ -455,14 +566,28 @@ $("import").onchange = async (e) => {
   }
   e.target.value = "";
 };
-function list(type) {
+async function list(type) {
+  if (type === "trash") {
+    try {
+      await loadLongTrash();
+    } catch (e) {
+      status(e.message);
+      return;
+    }
+  }
   dialog(type === "trash" ? "回收站" : "多端修改冲突", type);
   $("form").querySelector("button[type=submit]").hidden = true;
   for (const r of records().filter((r) =>
     type === "trash" ? r.deleted : r.conflict,
   )) {
     const row = text("div", "", "listrow");
-    row.append(text("strong", r.item.date + " " + r.item.title));
+    row.append(
+      text(
+        "strong",
+        (r.item.kind === "longtodo" ? "长期TODO · " : r.item.date + " ") +
+          r.item.title,
+      ),
+    );
     for (const v of type === "trash" ? [r.versions[0]] : r.versions) {
       row.append(
         text(
@@ -491,7 +616,8 @@ $("help").onclick = () => {
   dialog("操作指南", "help");
   $("form").querySelector("button[type=submit]").hidden = true;
   for (const p of [
-    "日期条保留今天前后各7天。桌面默认七日视图，手机默认单日行程；可以切换七日、十五日总览或单日。箭头按当前视图移动一天、一周或十五天。手机点右上角“更多”进入设置、帮助、备份和回收站。",
+    "桌面左侧展示每日安排，右侧为长期TODO。手机在“每日安排”和“长期TODO”两个页面间切换。日期视图仅保留七日与单日，箭头分别移动一周或一天。七日日期导航与时间表使用相同的列宽和滚动区域。",
+    "长期TODO包含内容、可选DDL和备注。有DDL的未完成事项按截止日期排序，无DDL的独立显示。已完成默认折叠，仅显示按完成时间计算的近7天；更早记录按月份保留在仓库中，并包含在完整备份里。点击正文编辑，点击方框完成或恢复。",
     "上方为有时间范围的日程，下方为只有日期的TODO。每个日期的“＋日程”和“＋TODO”分别创建对应类型；表单内也可切换。日程必须填写开始与结束时间；TODO没有时间输入框。双击日程空白区域也可新增日程。",
     "已完成的日程和TODO一律浅绿（包括当天及提前完成）。未完成日程按本地日期与结束时间判断，结束时间已到则浅灰；无时间TODO在日期过去后浅灰。其余普通浅黄、重要浅红。不再单独给课程染色。启动、每分钟及切回应用时刷新颜色；日程和TODO前的方框都可直接勾选。",
     "重复次数按每周一次展开，后续每个实例独立编辑。删除进入回收站，恢复不会丢失历史。",

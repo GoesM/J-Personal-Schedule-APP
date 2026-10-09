@@ -25,10 +25,14 @@ const empty = (title, note) => {
   );
   return e;
 };
-export function dateStrip(anchor, selected, onSelect, items) {
+export function dateStrip(anchor, selected, onSelect, items, view = "agenda") {
   const strip = element("div", "", "date-strip");
-  strip.setAttribute("aria-label", "前后十五天");
-  for (let n = -7; n <= 7; n++) {
+  strip.setAttribute(
+    "aria-label",
+    view === "week" ? "七日日期导航" : "前后七天日期导航",
+  );
+  if (view === "week") strip.append(element("span", "日期", "strip-axis"));
+  for (let n = view === "week" ? -3 : -7; n <= (view === "week" ? 3 : 7); n++) {
     const d = shift(anchor, n),
       isToday = d === localDate();
     const b = action(
@@ -174,9 +178,7 @@ export function agenda({ selected, items, onEdit, onNew, onToggle }) {
   return page;
 }
 export function overview({
-  anchor,
   selected,
-  view,
   items,
   onSelect,
   onEdit,
@@ -184,9 +186,7 @@ export function overview({
   onToggle,
   timelineHeight,
 }) {
-  const days = Array.from({ length: view === "range" ? 15 : 7 }, (_, n) =>
-    shift(view === "range" ? anchor : selected, n - (view === "range" ? 7 : 3)),
-  );
+  const days = Array.from({ length: 7 }, (_, n) => shift(selected, n - 3));
   const page = element("div", "", "overview");
   const summary = element("div", "", "section-heading overview-heading");
   summary.append(
@@ -203,24 +203,8 @@ export function overview({
   const grid = element("div", "", "grid");
   grid.style.setProperty("--days", days.length);
   grid.dataset.columns = days.length;
-  grid.append(element("div", "时间", "date axis"));
-  for (const d of days) {
-    const head = action(
-      "",
-      () => onSelect(d),
-      "date" +
-        (d === localDate() ? " today" : "") +
-        (d === selected ? " chosen" : ""),
-    );
-    head.dataset.date = d;
-    head.append(
-      element("span", weekday(d)),
-      element("strong", d.slice(5).replace("-", " / ")),
-    );
-    grid.append(head);
-  }
   // A labelled add action immediately under each date, never covering an event.
-  grid.append(element("div", "新增", "axis schedule-add-axis"));
+  grid.append(element("div", "时间", "axis schedule-add-axis"));
   for (const d of days) {
     const row = element("div", "", "schedule-add-cell");
     row.dataset.date = d;
@@ -288,6 +272,8 @@ export function overview({
     excess -= reduce;
   }
   const total = heights.reduce((a, b) => a + b, 0);
+  if (total > target + 1)
+    summary.children[1].textContent += " · 滚动查看更多时段 ↓";
   const y = (t) => {
     let v = 0;
     for (let n = 0; n < heights.length; n++) {
@@ -309,7 +295,12 @@ export function overview({
       (t === times.at(-1) ? total - 13 : Math.min(total - 29, y(t))) + "px";
     axis.append(label);
   });
-  grid.append(axis);
+  const timedScroll = element("div", "", "timed-scroll");
+  timedScroll.style.maxHeight = target + "px";
+  timedScroll.setAttribute("aria-label", "时间日程，可滚动查看更多时段");
+  timedScroll.tabIndex = 0;
+  const timeGrid = element("div", "", "timeline-grid");
+  timeGrid.append(axis);
   for (const d of days) {
     const col = element("div", "", "day");
     col.style.height = total + "px";
@@ -334,8 +325,10 @@ export function overview({
       card.style.width = `calc(${100 / count}% - 8px)`;
       col.append(card);
     }
-    grid.append(col);
+    timeGrid.append(col);
   }
+  timedScroll.append(timeGrid);
+  grid.append(timedScroll);
   grid.append(element("div", "TODO & 提醒 · 只有日期，不限定时间", "section"));
   grid.append(element("div", "TODO", "axis todo-axis"));
   for (const d of days) {

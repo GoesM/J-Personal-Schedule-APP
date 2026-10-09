@@ -257,6 +257,50 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
       store.records().find((r) => r.id === initial.id).item.title,
       "已解决",
     );
+    // Long TODO partitions travel through actual smart HTTP; two independent
+    // device IDs never contend on one index/active/monthly file.
+    await store.save({
+      kind: "longtodo",
+      title: "跨端长期TODO",
+      ddl: "",
+      notes: "",
+      done: false,
+    });
+    await synchronize(config);
+    const longBase = store.records().find((r) => r.item.kind === "longtodo");
+    device = "b";
+    await store.load();
+    await synchronize(config, false);
+    assert.equal(
+      store.records().find((r) => r.id === longBase.id).item.title,
+      "跨端长期TODO",
+    );
+    await store.save({ ...longBase.item, title: "B长期编辑" }, longBase);
+    device = "a";
+    await store.load();
+    await store.save(
+      { ...longBase.item, title: "A完成", done: true },
+      longBase,
+    );
+    await synchronize(config);
+    device = "b";
+    await store.load();
+    await synchronize(config);
+    let longConflict = store.records().find((r) => r.id === longBase.id);
+    assert.equal(longConflict.conflict, true);
+    await store.save(
+      { ...longConflict.item, title: "长期冲突已解决", done: true },
+      longConflict,
+    );
+    await synchronize(config);
+    device = "a";
+    await store.load();
+    await synchronize(config, false);
+    longConflict = store.records().find((r) => r.id === longBase.id);
+    assert.equal(longConflict.conflict, false);
+    assert.equal(longConflict.item.done, true);
+    assert.equal(longConflict.item.title, "长期冲突已解决");
+    assert.equal((await store.exportBackup()).longTodoHeads.length, 1);
   } finally {
     await new Promise((r) => server.close(r));
   }

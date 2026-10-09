@@ -1,5 +1,5 @@
 export function heads(ops) {
-  const parents = new Set(ops.flatMap((x) => x.parents || []));
+  const parents = new Set(ops.flatMap((x) => x.ancestors || x.parents || []));
   return ops.filter((x) => !parents.has(x.id));
 }
 export function materialize(ops) {
@@ -29,7 +29,8 @@ export function color(item, now = new Date()) {
     item.start && item.end
       ? new Date(item.date + "T" + item.end + ":00").getTime() <=
         clock.getTime()
-      : item.date < localDate(clock);
+      : (item.kind === "longtodo" ? item.ddl : item.date) &&
+        (item.kind === "longtodo" ? item.ddl : item.date) < localDate(clock);
   if (past) return "past";
   return item.important ? "important" : "future";
 }

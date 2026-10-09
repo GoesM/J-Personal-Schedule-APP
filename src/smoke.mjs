@@ -6,6 +6,8 @@ import {
   save,
   operations,
   importOps,
+  exportBackup,
+  importLongHeads,
   fs,
 } from "./store.mjs";
 import git from "isomorphic-git";
@@ -45,6 +47,21 @@ export async function verifyNative() {
     author: { name: "Smoke", email: "test@local.invalid" },
   });
   check(/^[0-9a-f]{40}$/.test(oid), "浏览器Git实际索引和提交");
+  await save({
+    kind: "longtodo",
+    title: "测试长期TODO",
+    ddl: "",
+    notes: "原生文件验证",
+    done: false,
+  });
+  let long = records().find((r) => r.item.kind === "longtodo");
+  await save({ ...long.item, done: true }, long);
+  await load();
+  check(
+    records().find((r) => r.item.kind === "longtodo").item.done,
+    "长期TODO月归档重读",
+  );
+  const longHeads = (await exportBackup()).longTodoHeads;
   await call("saveSettings", {
     url: "https://example.invalid/test.git",
     branch: "main",
@@ -56,7 +73,8 @@ export async function verifyNative() {
     "原生凭据加解密",
   );
   await load();
-  check(records().length === 2, "仓库切换保留事项");
+  await importLongHeads(longHeads);
+  check(records().length === 3, "仓库切换保留日程和长期TODO");
   await call("saveSettings", {});
   await load();
   return {
@@ -66,5 +84,6 @@ export async function verifyNative() {
     encryptedSettings: true,
     profileSwitch: true,
     browserGitCommit: true,
+    longTodoArchive: true,
   };
 }

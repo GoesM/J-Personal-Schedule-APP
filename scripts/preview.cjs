@@ -30,6 +30,22 @@ const bridge = `
   add(1,'Demo · 轻松散步','16:00','17:00','schedule','Demo公园','虚构示例：留一点休息时间');
   add(2,'Demo · 学习新技能','15:30','17:00','schedule','Demo工作台','虚构示例：尝试一个小练习');
   add(3,'Demo · 周中复盘','19:00','20:00','schedule','Demo书房','虚构示例：回顾进度');
+  const longDevice='demo-long', longIndex=[], active={}, completed={};
+  function addLong(title,ddl,notes,done=false) {
+    const op={id:crypto.randomUUID(),itemId:crypto.randomUUID(),parents:[],ancestors:[],at:new Date().toISOString(),deleted:false,item:{kind:'longtodo',date:'',start:'',end:'',title,ddl,notes,important:false,done,completedAt:done?'2026-05-17T12:00:00+08:00':''}};
+    const bucket=done?'completed/2026-05':'active';
+    (done?completed:active)[op.id]=op;
+    longIndex.push({id:op.id,itemId:op.itemId,parents:[],ancestors:[],at:op.at,done,doneAt:op.item.completedAt,deleted:false,bucket});
+  }
+  addLong('Demo · 整理作品集',day(1),'挑选三个项目，写清楚自己的思路。');
+  addLong('Demo · 完成阅读计划',day(5),'每次读一点，把新想法记下来。');
+  addLong('Demo · 规划一次旅行','','列好愿望清单，等一个合适的周末。');
+  addLong('Demo · 给书房添一抹绿','','看看适合室内的植物。');
+  addLong('Demo · 整理资料夹',day(-1),'文件归位，心里也轻一点。',true);
+  for(const p of ['/repo/longtodo','/repo/longtodo/'+longDevice,'/repo/longtodo/'+longDevice+'/completed']) dirs.add(p);
+  files.set('/repo/longtodo/'+longDevice+'/index.json',encode(JSON.stringify({format:'j-longtodo-v2',heads:longIndex})));
+  files.set('/repo/longtodo/'+longDevice+'/active.json',encode(JSON.stringify({format:'j-longtodo-v2',operations:active})));
+  files.set('/repo/longtodo/'+longDevice+'/completed/2026-05.json',encode(JSON.stringify({format:'j-longtodo-v2',operations:completed})));
   window.native={invoke:async(method,args)=>{const [p,v]=args;switch(method){case 'settings':return {};case 'mkdir':dirs.add(p);return;case 'list':return [...files.keys(),...dirs].filter(x=>x.startsWith(p+'/')&&!x.slice(p.length+1).includes('/')).map(x=>x.slice(p.length+1));case 'read':if(!files.has(p))throw Error('ENOENT');return files.get(p);case 'write':files.set(p,v);return;case 'ready':return;case 'export':return true;case 'saveSettings':throw Error('预览模式不保存真实仓库凭据');default:throw Error('预览模式不执行远程同步');}}};
 })();`;
 const root = path.resolve("dist");

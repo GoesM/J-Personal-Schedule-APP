@@ -36,3 +36,15 @@ test("日程拒绝空时间、倒置时间和无类型表单", () => {
   );
   assert.throws(() => itemFromForm(form("unknown")), /请选择/);
 });
+test("长期TODO只有内容、可选DDL与备注，不混用单日日期或时间", () => {
+  const f = form("longtodo");
+  f.set("ddl", "");
+  const i = itemFromForm(f);
+  assert.equal(i.kind, "longtodo");
+  assert.equal(i.ddl, "");
+  assert.equal(i.date, "");
+  assert.equal(i.start, "");
+  assert.equal(i.end, "");
+  f.set("ddl", "2026-12-31");
+  assert.equal(itemFromForm(f).ddl, "2026-12-31");
+});
