@@ -23,8 +23,9 @@ function run(exe, args) {
   if (r.status !== 0) throw Error("构建失败 " + exe);
 }
 fs.mkdirSync(path.join(build, "assets"), { recursive: true });
-for (const f of fs.readdirSync("dist"))
-  fs.copyFileSync("dist/" + f, path.join(build, "assets", f));
+require('./copy-tree.cjs')('dist', path.join(build, 'assets'));
+require('./persona-resources.cjs')(path.join(build, 'res'));
+run(path.join(tools, 'aapt2.exe'), ['compile', '--dir', path.join(build, 'res'), '-o', path.join(build, 'resources.zip')]);
 const html = path.join(build, "assets/index.html");
 fs.writeFileSync(
   html,
@@ -41,6 +42,7 @@ fs.writeFileSync(
 );
 run(path.join(tools, "aapt2.exe"), [
   "link",
+  path.join(build, 'resources.zip'),
   "-o",
   path.join(build, "base.apk"),
   "-I",
@@ -122,7 +124,7 @@ if (!fs.existsSync(key)) {
 }
 const aligned = path.join(build, "aligned.apk");
 run(path.join(tools, "zipalign.exe"), ["-f", "4", unsigned, aligned]);
-const output = path.join(base, "release/J人小程序-Android.apk");
+const output = path.join(base, "release/J人日程APP-Android.apk");
 run(path.join(java, "bin/java.exe"), [
   "-jar",
   path.join(tools, "lib/apksigner.jar"),

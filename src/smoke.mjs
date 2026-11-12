@@ -16,6 +16,11 @@ const check = (value, message) => {
   if (!value) throw Error("SMOKE_FAIL: " + message);
 };
 export async function verifyNative() {
+  for (const id of ['INTJ','ENTJ','INFJ','ENFJ','ISTJ','ESTJ','ISFJ','ESFJ']) {
+    await call('saveAppearance', id);
+    check((await call('appearance')).persona === id, '原生图标切换与持久化 ' + id);
+  }
+  await call('saveAppearance', 'ISTJ');
   const date = localDate();
   await save({ title: "测试TODO", date, kind: "todo" });
   await save({
@@ -85,5 +90,6 @@ export async function verifyNative() {
     profileSwitch: true,
     browserGitCommit: true,
     longTodoArchive: true,
+    nativePersonas: true,
   };
 }

@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "characters": [
+    {
+      "id": "INTJ",
+      "name": "建筑师"
+    },
+    {
+      "id": "ENTJ",
+      "name": "指挥官"
+    },
+    {
+      "id": "INFJ",
+      "name": "提倡者"
+    },
+    {
+      "id": "ENFJ",
+      "name": "主人公"
+    },
+    {
+      "id": "ISTJ",
+      "name": "物流师"
+    },
+    {
+      "id": "ESTJ",
+      "name": "总经理"
+    },
+    {
+      "id": "ISFJ",
+      "name": "守卫者"
+    },
+    {
+      "id": "ESFJ",
+      "name": "执政官"
+    }
+  ],
+  "states": [
+    "idle",
+    "walk",
+    "start",
+    "settle",
+    "wave",
+    "added",
+    "celebrate",
+    "sleep"
+  ],
+  "canvas": [
+    256,
+    256
+  ],
+  "anchor": [
+    128,
+    238
+  ],
+  "bounds": [
+    8,
+    8,
+    240,
+    240
+  ],
+  "source": "16Personalities / NERIS Analytics Limited",
+  "runtime": "pet-runtime.js"
+}

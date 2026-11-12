@@ -1,4 +1,6 @@
-import { localDate, shift, color, boundaries, lanes } from "./model.mjs";
+import { localDate, shift, color, lanes } from "./model.mjs";
+import { splitter } from './splitter.mjs';
+import { timeScale, clock, resizeRange } from './time-scale.mjs';
 export const element = (tag, value = "", cls = "") => {
   const e = document.createElement(tag);
   e.textContent = value;
@@ -9,7 +11,6 @@ const weekday = (d) =>
   ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
     new Date(d + "T12:00:00").getDay()
   ];
-const minute = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 const action = (label, fn, cls = "") => {
   const b = element("button", label, cls);
   b.type = "button";
@@ -32,7 +33,7 @@ export function dateStrip(anchor, selected, onSelect, items, view = "agenda") {
     view === "week" ? "七日日期导航" : "前后七天日期导航",
   );
   if (view === "week") strip.append(element("span", "日期", "strip-axis"));
-  for (let n = view === "week" ? -3 : -7; n <= (view === "week" ? 3 : 7); n++) {
+  for (let n = view === "week" ? -1 : -7; n <= (view === "week" ? 5 : 7); n++) {
     const d = shift(anchor, n),
       isToday = d === localDate();
     const b = action(
@@ -121,6 +122,78 @@ function heading(title, note, onAdd) {
   h.append(t, action("＋", onAdd, "section-add"));
   return h;
 }
+// Controls redraw this timeline only, preserving the user's pane split and scroll.
+function adaptiveTimeline(container, header, days, records, onEdit, onToggle, onNew) {
+  let weights=[];
+  try { const value=JSON.parse(localStorage.getItem('timeline-minute-heights')); if(Array.isArray(value) && value.length===1440 && value.every(n=>Number.isFinite(n)&&n>0)) weights=value; } catch {}
+  const persist=()=>localStorage.setItem('timeline-minute-heights',JSON.stringify(weights));
+  header.append(action('重置高度',()=>{weights=[];localStorage.removeItem('timeline-minute-heights');draw();},'time-height-reset'));
+  function draw() {
+    const events=records.filter(r=>r.item.start);
+    if(!events.length) {
+      container.replaceChildren(empty('这段时间没有日程', '点击 ＋ 日程，安排新的事项。'));
+      return;
+    }
+    const scale=timeScale(events.map(r=>r.item), weights);
+    const grid=element('div','','timeline-grid adaptive-grid');
+    grid.style.gridTemplateColumns=`var(--axis-width, 50px) repeat(${days.length}, minmax(0, 1fr))`;
+    const axis=element('div','','axis time-axis');
+    axis.style.height=scale.total+'px';
+    const eventTimes=new Set(events.flatMap(r=>[r.item.start,r.item.end]));
+    for(const point of scale.points) {
+      // Keep both edges of a compressed gap: the preceding event's end above
+      // the break, and the next event's start below. Never suppress event ends.
+      if(!eventTimes.has(clock(point))) continue;
+      const above=scale.segments.some(s=>s.folded && s.start===point);
+      const top=Math.max(0,Math.min(scale.total-13,scale.y(point)-(above?13:0)));
+      const label=element('span',clock(point));label.style.top=top+'px';axis.append(label);
+    }
+    grid.append(axis);
+    for(const date of days) {
+      const col=element('div','','day');col.style.height=scale.total+'px';
+      for(const point of scale.points.slice(1,-1)) {
+        const line=element('i','','time-line');line.style.top=scale.y(point)+'px';col.append(line);
+      }
+      col.ondblclick=e=>{if(e.target===col || e.target.classList.contains('time-line')) onNew(date,true);};
+      const daily=events.filter(r=>r.item.date===date), tracks=lanes(daily);
+      for(const r of daily) {
+        const card=eventCard(r,onEdit,onToggle), {lane,count}=tracks.get(r.id);
+        card.style.top=scale.y(r.item.start)+'px';
+        card.style.height=(scale.y(r.item.end)-scale.y(r.item.start))+'px';
+        card.style.left=`calc(${lane/count*100}% + 4px)`;
+        card.style.width=`calc(${100/count}% - 8px)`;
+        const grip=action('⋯',e=>e.stopPropagation(),'event-resize');
+        grip.title='拖动调整显示高度；同时间段各天一起调整，不改变日程时间';
+        grip.setAttribute('aria-label','调整 '+r.item.title+' 显示高度（上下方向键）');
+        grip.onpointerdown=e=>{
+          if(e.button!==0) return;
+          e.preventDefault();e.stopPropagation();
+          const origin=e.clientY, base=[...weights], pointer=e.pointerId;
+          const move=ev=>{if(ev.pointerId!==pointer) return;weights=resizeRange(base,events.map(x=>x.item),r.item.start,r.item.end,ev.clientY-origin);draw();};
+          const stop=()=>{persist();window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',stop);window.removeEventListener('pointercancel',stop);window.removeEventListener('blur',stop);};
+          window.addEventListener('pointermove',move);window.addEventListener('pointerup',stop);window.addEventListener('pointercancel',stop);window.addEventListener('blur',stop);
+        };
+        grip.onkeydown=e=>{
+          if(!['ArrowUp','ArrowDown'].includes(e.key)) return;
+          e.preventDefault();weights=resizeRange(weights,events.map(x=>x.item),r.item.start,r.item.end,e.key==='ArrowUp'?-24:24);persist();draw();
+          [...container.querySelectorAll('.event')].find(c=>c.dataset.itemId===r.id)?.querySelector('.event-resize')?.focus({preventScroll:true});
+        };
+        card.append(grip);
+        col.append(card);
+      }
+      grid.append(col);
+    }
+    for(const s of scale.segments.filter(s=>s.folded)) {
+      const gap=element('div','','idle-gap');
+      gap.title=`${clock(s.start)}–${clock(s.end)}`;
+      gap.setAttribute('aria-label',`已压缩时段 ${clock(s.start)}–${clock(s.end)}`);
+      gap.style.top=s.top+'px';
+      grid.append(gap);
+    }
+    container.replaceChildren(grid);
+  }
+  draw();
+}
 export function agenda({ selected, items, onEdit, onNew, onToggle }) {
   const page = element("div", "", "agenda");
   page.append(
@@ -140,29 +213,18 @@ export function agenda({ selected, items, onEdit, onNew, onToggle }) {
   const todos = items.filter((r) => r.item.date === selected && !r.item.start);
   const timed = element("section", "", "agenda-section");
   timed.append(
-    heading("当日行程", events.length + " 个安排 · 有明确时间", () =>
+    heading("当日日程", events.length + " 个安排 · 有明确时间", () =>
       onNew(selected, true),
     ),
   );
   const timeline = element("div", "", "agenda-timeline");
-  for (const r of events) {
-    const row = element("div", "", "agenda-row");
-    row.append(
-      element("time", r.item.start, "agenda-time"),
-      eventCard(r, onEdit, onToggle),
-    );
-    timeline.append(row);
-  }
-  if (!events.length)
-    timeline.append(
-      empty("今天留一些自由时间", "还没有日程，点右上角 ＋ 安排一下。"),
-    );
+  adaptiveTimeline(timeline, timed.querySelector('.section-heading'), [selected], events, onEdit, onToggle, onNew);
   timed.append(timeline);
   timed.append(action("＋ 日程", () => onNew(selected, true), "add-schedule"));
   const task = element("section", "", "agenda-section");
   task.append(
     heading(
-      "TODO & 提醒",
+      "当日TODO",
       todos.filter((r) => !r.item.done).length + " 项待完成 · 不限定时间",
       () => onNew(selected, false),
     ),
@@ -174,7 +236,7 @@ export function agenda({ selected, items, onEdit, onNew, onToggle }) {
     col.append(empty("没有待办，轻装上阵", "想到一件事，就把它记在这里。"));
   col.append(action("＋ 添加 TODO", () => onNew(selected, false), "add-todo"));
   task.append(col);
-  page.append(timed, task);
+  page.append(timed, splitter(timeline,[col],Math.max(400,window.innerHeight-320)), task);
   return page;
 }
 export function overview({
@@ -186,11 +248,11 @@ export function overview({
   onToggle,
   timelineHeight,
 }) {
-  const days = Array.from({ length: 7 }, (_, n) => shift(selected, n - 3));
+  const days = Array.from({ length: 7 }, (_, n) => shift(selected, n - 1));
   const page = element("div", "", "overview");
   const summary = element("div", "", "section-heading overview-heading");
   summary.append(
-    element("h3", "时间日程"),
+    element("h3", "当日日程"),
     element(
       "span",
       days[0].slice(5).replace("-", " / ") +
@@ -214,122 +276,16 @@ export function overview({
     grid.append(row);
   }
   const visible = items.filter((r) => days.includes(r.item.date));
-  const times = boundaries(visible.map((r) => r.item));
-  const base = times
-    .slice(1)
-    .map((t, n) =>
-      Math.max(52, Math.min(130, (minute(t) - minute(times[n])) * 0.85)),
-    );
-  const natural = base.reduce((a, b) => a + b, 0),
-    target = timelineHeight || Math.max(280, (window.innerHeight || 900) - 500),
-    scale = target / natural,
-    heights = base.map((h) => h * scale);
-  // Fill the available area, but keep short events readable. Expand shared segments
-  // rather than artificially growing individual cards into neighbouring events.
-  const minimumFor = (r) =>
-    r.item.location
-      ? r.item.title.length > 10
-        ? 112
-        : 96
-      : r.item.title.length > 10
-        ? 94
-        : 76;
-  for (const r of visible.filter((r) => r.item.start)) {
-    const a = times.indexOf(r.item.start),
-      b = times.indexOf(r.item.end);
-    const span = heights.slice(a, b).reduce((sum, h) => sum + h, 0);
-    const minimum = minimumFor(r);
-    if (a >= 0 && b > a && span < minimum)
-      for (let n = a; n < b; n++) heights[n] *= minimum / span;
-  }
-  // Reclaim surplus from blank spans first, then from spans with safe event slack.
-  // Dense weeks may still scroll; readability wins over forcibly squeezing cards.
-  const intervals = visible
-    .filter((r) => r.item.start)
-    .map((r) => ({
-      a: times.indexOf(r.item.start),
-      b: times.indexOf(r.item.end),
-      min: minimumFor(r),
-    }));
-  let excess = heights.reduce((a, b) => a + b, 0) - target;
-  const order = heights
-    .map((h, n) => n)
-    .sort((a, b) => {
-      const occupied = (n) =>
-        intervals.filter((i) => i.a <= n && i.b > n).length;
-      return occupied(a) - occupied(b) || heights[b] - heights[a];
-    });
-  for (const n of order) {
-    if (excess <= 0) break;
-    let slack = Math.max(0, heights[n] - (n === heights.length - 1 ? 26 : 18));
-    for (const i of intervals.filter((i) => i.a <= n && i.b > n))
-      slack = Math.min(
-        slack,
-        Math.max(0, heights.slice(i.a, i.b).reduce((a, b) => a + b, 0) - i.min),
-      );
-    const reduce = Math.min(excess, slack);
-    heights[n] -= reduce;
-    excess -= reduce;
-  }
-  const total = heights.reduce((a, b) => a + b, 0);
-  if (total > target + 1)
-    summary.children[1].textContent += " · 滚动查看更多时段 ↓";
-  const y = (t) => {
-    let v = 0;
-    for (let n = 0; n < heights.length; n++) {
-      if (t >= times[n + 1]) v += heights[n];
-      else if (t >= times[n]) {
-        v +=
-          (heights[n] * (minute(t) - minute(times[n]))) /
-          (minute(times[n + 1]) - minute(times[n]));
-        break;
-      }
-    }
-    return v;
-  };
-  const axis = element("div", "", "axis time-axis");
-  axis.style.height = total + "px";
-  times.forEach((t) => {
-    const label = element("span", t);
-    label.style.top =
-      (t === times.at(-1) ? total - 13 : Math.min(total - 29, y(t))) + "px";
-    axis.append(label);
-  });
+  const target = timelineHeight || 480;
   const timedScroll = element("div", "", "timed-scroll");
   timedScroll.style.maxHeight = target + "px";
-  timedScroll.setAttribute("aria-label", "时间日程，可滚动查看更多时段");
+  timedScroll.setAttribute("aria-label", "当日日程时间轴，可滚动查看更多时段");
   timedScroll.tabIndex = 0;
-  const timeGrid = element("div", "", "timeline-grid");
-  timeGrid.append(axis);
-  for (const d of days) {
-    const col = element("div", "", "day");
-    col.style.height = total + "px";
-    for (let n = 1; n < times.length - 1; n++) {
-      const line = element("i", "", "time-line");
-      line.style.top = y(times[n]) + "px";
-      col.append(line);
-    }
-    col.ondblclick = (e) => {
-      if (e.target === col || e.target.classList.contains("time-line"))
-        onNew(d, true);
-    };
-    const events = visible.filter((r) => r.item.date === d && r.item.start),
-      tracks = lanes(events);
-    for (const r of events) {
-      const card = eventCard(r, onEdit, onToggle),
-        { lane, count } = tracks.get(r.id);
-      card.style.top = y(r.item.start) + "px";
-      card.style.height =
-        Math.max(1, y(r.item.end) - y(r.item.start) - 4) + "px";
-      card.style.left = `calc(${(lane / count) * 100}% + 4px)`;
-      card.style.width = `calc(${100 / count}% - 8px)`;
-      col.append(card);
-    }
-    timeGrid.append(col);
-  }
-  timedScroll.append(timeGrid);
+  adaptiveTimeline(timedScroll, summary, days, visible, onEdit, onToggle, onNew);
   grid.append(timedScroll);
-  grid.append(element("div", "TODO & 提醒 · 只有日期，不限定时间", "section"));
+  const todoHeading=element('div','','section-heading todo-heading');
+  todoHeading.append(element('h3','当日TODO'),element('span','只有日期，不限定时间','subtle'));
+  grid.append(todoHeading);
   grid.append(element("div", "TODO", "axis todo-axis"));
   for (const d of days) {
     const col = element("div", "", "todos");
@@ -340,6 +296,7 @@ export function overview({
     grid.append(col);
   }
   page.append(grid);
+  grid.insertBefore(splitter(timedScroll,grid.querySelectorAll('.todos'),Math.max(360,target+210)),todoHeading);
   return page;
 }
 export function sidebarSummary(selected, items) {

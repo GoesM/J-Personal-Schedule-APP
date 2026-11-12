@@ -4,22 +4,41 @@ const {
   ipcMain,
   safeStorage,
   dialog,
+  shell,
 } = require("electron");
 const fs = require("fs/promises"),
   path = require("path");
-let win, root, profile;
+let win, root, profile,petHost;
+// Native Wayland restricts global positioning. Prefer XWayland when available.
+if(process.platform==='linux'&&process.env.WAYLAND_DISPLAY&&process.env.DISPLAY&&!app.commandLine.hasSwitch('ozone-platform'))app.commandLine.appendSwitch('ozone-platform','x11');
+// Public product name can change; the established profile location must not.
+app.setPath('userData', path.join(app.getPath('appData'),'j-personal-schedule'));
+let appearanceManager;
 let allowExit = false,
   rendererReady = false,
   fallbackClosing = false;
 const exitSmoke = process.argv.includes("--exit-smoke-test");
-const smoke = process.argv.includes("--smoke-test") || exitSmoke;
+const petSmoke=process.argv.includes('--pet-smoke-test')||process.argv.includes('--pet-self-test');
+const smoke = process.argv.includes("--smoke-test") || exitSmoke || petSmoke;
+if(smoke)app.setPath('userData',require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(),'jcalendar-runtime-')));
+if(petSmoke)app.disableHardwareAcceleration();
 let testCloseRequested = false,
   testPromptReceived = false;
+async function requestFullExit(){
+  if(rendererReady&&win&&!win.webContents.isDestroyed()&&!win.webContents.isCrashed()){
+    if(!smoke){win.show();win.focus();}win.webContents.send('request-exit');return;
+  }
+  if(fallbackClosing)return;fallbackClosing=true;
+  try{const {response}=await dialog.showMessageBox(win,{type:'warning',title:'退出程序',message:'暂时无法检查同步状态。是否直接退出？本地已保存的数据会保留。',buttons:['取消退出','直接退出'],defaultId:0,cancelId:0});
+    if(response===1){allowExit=true;if(petHost){await petHost.dispose();petHost=null;}win.close();}
+  }finally{fallbackClosing=false;}
+}
 if (!smoke) {
   if (!app.requestSingleInstanceLock()) app.quit();
   app.on("second-instance", () => {
     if (win) {
       if (win.isMinimized()) win.restore();
+      win.show();
       win.focus();
     }
   });
@@ -46,6 +65,18 @@ ipcMain.handle("native", async (event, method, args) => {
   if (event.sender !== win.webContents) throw Error("非法来源");
   const [p, v] = args;
   switch (method) {
+    case 'petToggle': return petHost?.toggle();
+    case 'petSnapshot': petHost?.publish(p); return;
+    case 'petReply': petHost?.reply(p); return;
+    case 'petEffect': petHost?.effect(p); return;
+    case 'capabilities': return {readBatch:true};
+    case 'readBatch': {
+      if (!Array.isArray(p) || p.length > 32) throw Error('批量读取上限32个文件');
+      return Object.fromEntries(await Promise.all(p.map(async name => [name,(await fs.readFile(scoped(name))).toString('base64')])));
+    }
+    case 'appearance': return appearanceManager.refresh();
+    case 'saveAppearance': return appearanceManager.save(p);
+    case 'personaShortcut': return appearanceManager.shortcut(true);
     case "ready":
       rendererReady = true;
       if (smoke) {
@@ -55,7 +86,7 @@ ipcMain.handle("native", async (event, method, args) => {
             testCloseRequested = true;
             win.close();
           }, 100);
-        else app.quit();
+        else if(!petSmoke)app.quit();
       }
       return;
     case "exit":
@@ -72,6 +103,7 @@ ipcMain.handle("native", async (event, method, args) => {
         );
       }
       allowExit = true;
+      if(petHost){await petHost.dispose();petHost=null;}
       win.close();
       return;
     case "exitTestPrompt":
@@ -148,6 +180,7 @@ ipcMain.handle("native", async (event, method, args) => {
         safeStorage.encryptString(JSON.stringify(p)),
       );
       profile = next;
+      await petHost?.setBinding(path.basename(profile));
       return;
     }
     case "http": {
@@ -191,6 +224,9 @@ app.whenReady().then(async () => {
     ? await fs.mkdtemp(path.join(require("os").tmpdir(), "jcalendar-smoke-"))
     : path.join(app.getPath("userData"), "data");
   await fs.mkdir(root, { recursive: true });
+  app.setAppUserModelId('cn.goesm.jcalendar');
+  appearanceManager = require('./personas.cjs').createPersonas({root, app, shell, getWindow: () => win, syncLinks: !smoke&&process.platform==='win32'});
+  const appearance = await appearanceManager.read();
   let configuration = {};
   try {
     configuration = JSON.parse(
@@ -204,54 +240,41 @@ app.whenReady().then(async () => {
   win = new BrowserWindow({
     width: 1280,
     height: 900,
-    title: "J人小程序",
+    title: "J人日程APP",
+    icon: appearanceManager.icon(appearance.persona),
     show: !smoke,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
+      offscreen:petSmoke,
       additionalArguments: smoke
-        ? ["--smoke-test", ...(exitSmoke ? ["--exit-smoke-test"] : [])]
+        ? ["--smoke-test", ...(exitSmoke ? ["--exit-smoke-test"] : []),...(petSmoke?['--pet-smoke-test']:[])]
         : [],
     },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.on("close", (e) => {
-    if ((smoke && !exitSmoke) || allowExit) return;
+    if ((smoke && !exitSmoke && !petSmoke) || allowExit) return;
     e.preventDefault();
-    if (
-      rendererReady &&
-      !win.webContents.isDestroyed() &&
-      !win.webContents.isCrashed()
-    ) {
-      win.webContents.send("request-exit");
-    } else if (!fallbackClosing) {
-      fallbackClosing = true;
-      dialog
-        .showMessageBox(win, {
-          type: "warning",
-          title: "退出程序",
-          message:
-            "暂时无法检查同步状态。是否直接退出？本地已保存的数据会保留。",
-          buttons: ["取消退出", "直接退出"],
-          defaultId: 0,
-          cancelId: 0,
-        })
-        .then(({ response }) => {
-          if (response === 1) {
-            allowExit = true;
-            win.close();
-          }
-        })
-        .finally(() => {
-          fallbackClosing = false;
-        });
-    }
+    if(petHost?.enabled&&rendererReady&&!win.webContents.isCrashed()){win.hide();return;}
+    requestFullExit();
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (!url.startsWith("file:")) e.preventDefault();
   });
   await win.loadFile(path.join(__dirname, "../dist/index.html"));
+  if(!smoke||petSmoke){
+    petHost=await require('./pet/host.cjs').createPetHost({root,getMain:()=>win,requestExit:requestFullExit,icon:appearanceManager.icon(appearance.persona),testing:petSmoke});
+    await petHost.setBinding(path.basename(profile));
+    win.webContents.send('pet-command',{requestId:'initial',command:{type:'refresh'}});
+    if(process.argv.includes('--pet-self-test')){
+      try{const report=await require('./pet/self-test.cjs')({win,petHost,root});console.log('PET_SELF_TEST '+JSON.stringify(report));await petHost.dispose();app.exit(0);}catch(e){console.error(e.stack);app.exit(1);}
+    }
+  }
 });
 app.on("window-all-closed", () => app.quit());
+app.on('before-quit',event=>{if(petHost&&!allowExit&&!smoke){event.preventDefault();requestFullExit();}});
+if(petSmoke)module.exports.inspect=()=>({win,petHost,root});

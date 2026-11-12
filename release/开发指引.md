@@ -42,6 +42,12 @@ npm start
 
 ## 构建客户端
 
+### 本地 Windows 发行物保留
+
+每次新版本完成打包和验证后，`release/` 仅保留最新一个版本的 `win-unpacked`，以及最新两个版本的 Windows ZIP（每版一份，放在根目录）。按数字版本号排序，先验收再清理，失败构建不替换已有可用版本。清理优先移入回收站；不要终止用户正在运行的旧程序。
+
+同时更新 `release/SHA256.json` 和版本管理表。本规则不涉及个人数据、源码、签名密钥、Android APK 或远端发行记录。后续维护执行细则见项目根目录 `AGENTS.md`。
+
 ### Windows
 
 ```powershell
@@ -67,7 +73,7 @@ $env:JAVA_HOME = '你的JDK或JBR目录'
 npm run package:android
 ```
 
-务必显式设置路径；脚本原有默认值是作者本机路径。aapt2 资源编译使用临时英文目录，输出仍在 `release/J人小程序-Android.apk`。
+务必显式设置路径；脚本原有默认值是作者本机路径。aapt2 资源编译使用临时英文目录，输出仍在 `release/J人日程APP-Android.apk`。
 
 首次构建会在 `env/signing/` 生成自己的签名密钥。安全备份 `release.jks` 和 `password.txt`；同一签名才可持续覆盖升级。**私钥与密码绝不能提交源码或放进 Release**。贡献者自行构建的签名与官方不同，不能直接覆盖官方安装。
 
@@ -110,3 +116,34 @@ node_modules/electron/dist/electron.exe . --exit-smoke-test
 源码进入 Git，ZIP/APK 通过 GitHub Releases 分发；不要把大型安装包加入 Git 历史。版本号需同步 `package.json`、lockfile 和 Android Manifest，Android `versionCode` 递增，签名保持稳定。附当前发行文件的 SHA256 与更新摘要，说明真机验证和已知限制。
 
 上传前检查 `.gitignore`、待提交文件与安装包内容，排除 `env/`、凭据、数据日志、签名私钥和本地验收记录。Windows 完整 ZIP、官方 APK、使用教程和必要的第三方许可一起发布。
+
+
+## 自适应时间轴（1.6.1）
+`src/time-scale.mjs` 将可见日程的占用区间取并集；占用分钟统一为 1.8px，仅连续至少 60 分钟的空闲区间折叠为 32px。所有日期共用同一映射，以保持对齐和日程时长比例。`planner-view.mjs` 提供单段展开与整体切换；整体偏好使用本机 localStorage `compress-idle`，单段展开仅在当前视图内有效。空数据不绘制整天空轴。
+
+
+## 1.6.2 固定启动器与同步形象
+Windows 发行脚本将 release 快捷方式及桌面副本统一指向 launch-current.vbs，通过 UTF-16 current-version.txt 寻找当前 EXE。保持 release 根目录不移动即可跨版本复用。个人快捷方式也优先使用固定启动器。
+形象记录位于仓库 preferences/appearance-UUID.json，追加写入、逻辑递增版本；并发同版本按 UUID 确定性收敛，合并后再次选择即覆盖并发结果。Git 同步纳入该目录，退出检查识别未上传偏好。启动拉取后应用云端选择；旧本机偏好仅在成功拉取且云端无偏好时迁移。凭据仍仅在本机。
+
+
+## 1.6.3 快捷方式图标刷新
+原生 appearance 查询会调用 refresh，保存与云端形象应用同样刷新。扫描桌面及本安装 release 的 .lnk，以精确 EXE 路径或 wscript 加精确 launcher 参数识别归属，使用 shell.writeShortcutLink(update) 仅更新 icon/iconIndex。独立 MBTI ico 路径避免覆盖同名图标造成缓存不变。启动补齐后复制的旧图标副本。打包脚本根据本机 appearance.json 更新发行快捷方式；默认不读取其他设置。测试脚本 persona-smoke.cjs 验证真实临时 .lnk 往返，成品冒烟测试禁用用户快捷方式更新。
+
+
+## 1.7.0 可调时间轴
+`resizeRange` 将目标日程覆盖分钟的显示密度按比例缩放；同视图所有日期共享 `timeScale` 的前缀累计映射，因此边界保持横向一致。重叠事项缩小时受最小可用高度约束。1440 个分钟权重存入本机 localStorage `timeline-minute-heights`，非法值回退默认；压缩空闲仍优先为 32px，恢复默认清除此键。日期导航与 overview 均采用 -1..+5。
+
+
+1.7.1：timeScale 仅接受 items 与 weights；空闲压缩固定开启，移除 expanded/compress 参数和界面开关。idle-gap 为静态 div，无点击行为及展开状态。
+
+
+1.7.2：所有非占用区间压缩为 6px，idle-gap 无可见文字，仅 title/aria-label 保留时间信息。空闲开始处刻度让位给结束处刻度，避免紧邻重叠。
+
+
+1.7.3：时间轴标签取实际事件起止时间集合；空闲起点的结束刻度向上偏移 13px，空闲终点的开始刻度保持原位，不再因压缩间隔丢弃结束标签。
+
+
+## 1.8.0 桌宠
+
+见 [桌宠模块与使用说明](DESKTOP_PET.md)。桌宠及清单不得自行持有 Git 存储实例；修改共用 `save` 成功事件时必须验证新增、完成、失败和导入不误触发。窗口拖动只响应用户输入。素材唯一维护源为相邻 J人形象设计目录。Linux 构建为 `npm run package:linux`。

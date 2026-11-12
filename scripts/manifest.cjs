@@ -1,7 +1,7 @@
 const fs = require("fs"),
   path = require("path"),
   crypto = require("crypto");
-const files = fs.readdirSync("release").filter((f) => /\.(zip|apk)$/.test(f));
+const files = fs.readdirSync("release").filter((f) => /\.(zip|apk|tar\.gz)$/.test(f));
 const hashes = files.map((name) => ({
   name,
   size: fs.statSync(path.join("release", name)).size,

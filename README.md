@@ -1,6 +1,6 @@
 <div align="center">
 
-# J人小程序
+# J人日程APP
 
 <sub>J PERSONAL SCHEDULE</sub>
 
@@ -10,7 +10,7 @@
 
 日程、单日 TODO 与长期 TODO，一处记录，多端衔接；同步交给你自己的 Git 仓库。
 
-`Windows` · `Android` · `离线优先` · `无需自建服务器`
+`Windows` · `Ubuntu / Linux` · `Android` · `离线优先` · `无需自建服务器`
 
 **[下载客户端 →](https://github.com/GoesM/J-Personal-Schedule-APP/releases/latest)** &nbsp; · &nbsp; [使用教程](docs/USAGE.md) &nbsp; · &nbsp; [开发指南](docs/DEVELOPMENT.md)
 
@@ -21,6 +21,12 @@
 > 客户端内置 Git 引擎，**无需安装 Git，也无需手动敲 Git 命令**；“开箱即用”指解压或安装后即可运行，跨设备同步仍需配置自己的仓库。首次使用请先阅读 [下载与使用教程](docs/USAGE.md)。
 
 ## 界面一览
+
+### 1.8.0 · 桌宠与随手清单
+
+八位 J 型角色可常驻 Windows / Ubuntu 桌面：拖动时迈步、松手后原地停留，支持今日与长期 TODO 预览、勾选完成、快捷新增和无声提醒。清单窗口自动避让人物。[桌宠使用说明 →](docs/DESKTOP_PET.md)
+
+[下载 Windows / Linux 1.8.0](https://github.com/GoesM/J-Personal-Schedule-APP/releases/tag/v1.8.0)。同页提供原有 Android 1.7.3 APK；桌宠功能仅用于桌面端。Ubuntu 已在 24.04 WSLg 验证，原生 GNOME 桌面与纯 Wayland 的限制见发布说明。
 
 ### 桌面 · 一周安排，尽收眼底
 

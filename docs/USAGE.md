@@ -8,7 +8,7 @@
 
 | 平台    | 下载与运行                                                                | 要求                                        |
 | ------- | ------------------------------------------------------------------------- | ------------------------------------------- |
-| Windows | 下载 `J-Personal-Schedule-版本号-win.zip`，完整解压后双击 `J人小程序.exe` | Windows 10/11，x64                          |
+| Windows | 下载 `J-Personal-Schedule-版本号-win.zip`，完整解压后双击 `J人日程APP.exe` | Windows 10/11，x64                          |
 | Android | 下载 `J-Personal-Schedule-Android.apk`，复制到手机并安装                  | Android 8.0+，较新的 Android System WebView |
 
 客户端内置 Git 引擎，使用时无需另装 Git、Node 或 Java。Windows 包请保留全部文件，不要单独复制 EXE。当前 Windows 发行包没有可信发布者代码签名，可能出现未知发布者提示；请确认来源是本仓库官方 Releases，不要关闭系统安全防护。
@@ -88,3 +88,13 @@ Git 同步无须自建应用后端，但仍依赖你选择的 Git 托管服务�
 - **Excel 导入**：目前不提供 XLSX 自动导入；支持本应用 JSON 备份。
 
 仍有问题？请 [提交 Issue](https://github.com/GoesM/J-Personal-Schedule-APP/issues)，附上客户端版本、系统、复现步骤和已脱敏截图，**不要附上令牌或真实私有日程数据**。
+
+
+## 固定桌面入口与云端形象（1.6.2）
+桌面 J人日程APP 快捷方式与 release 快捷方式都通过固定启动器打开当前版本。后续本目录内更新无需重新复制；请保留 release 根目录下 launch-current.vbs、current-version.txt、app.ico，不要移动整个 release 目录。
+在个性化图标中保存形象后，点击“与云端同步”上传；其他设备使用同一仓库及分支，启动拉取或手动同步后采用云端选择。旧本机选择在成功拉取且云端没有形象设置时迁移。两台设备同时离线选择会自动确定一个共同结果；同步后重新选择即可覆盖。EXE 文件内置图标仍为默认形象，Windows 图标缓存及安卓桌面可能延迟刷新。
+
+
+## 桌宠（Windows / Linux 1.8.0）
+
+启动后可拖动人物、点击查看清单、右键打开菜单。桌宠开启时关闭主窗口会收起主界面；完全退出请使用托盘或“退出程序”。详见 [桌宠使用说明](DESKTOP_PET.md)。

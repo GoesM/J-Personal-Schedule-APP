@@ -3,6 +3,9 @@ const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+// Use a deterministic software surface for offscreen screenshots on hosts whose
+// GPU driver cannot provide a hidden-window capture surface.
+app.disableHardwareAcceleration();
 app.setPath(
   "userData",
   fs.mkdtempSync(path.join(require("node:os").tmpdir(), "j-ui-test-")),
@@ -24,6 +27,7 @@ app.whenReady().then(async () => {
       contextIsolation: true,
     },
   });
+  win.webContents.on('console-message', event => { if (event.level === 'error') console.error(event.message); });
   try {
     for (const [name, width, height, view] of [
       ["desktop", 1320, 900, "week"],
@@ -43,6 +47,18 @@ app.whenReady().then(async () => {
         await pause(30);
       }
       await pause(180);
+      await win.webContents.executeJavaScript(`document.getElementById('appearance').click()`);
+      await pause(180);
+      const iconCheck = await win.webContents.executeJavaScript(`(() => {
+        const grid=document.querySelector('.persona-picker');
+        return {count:grid.querySelectorAll('input').length, loaded:[...grid.querySelectorAll('img')].every(i=>i.complete&&i.naturalWidth>0), overflow:grid.scrollWidth>grid.clientWidth+1};
+      })()`);
+      assert.equal(iconCheck.count,8); assert.equal(iconCheck.loaded,true); assert.equal(iconCheck.overflow,false);
+      fs.writeFileSync(path.join(out, name + '-personas.png'), (await win.webContents.capturePage()).toPNG());
+      await win.webContents.executeJavaScript(`document.getElementById('cancel').click()`);
+      await win.webContents.executeJavaScript(`document.getElementById('appearance').click();document.querySelector('input[name=persona][value=INTJ]').click();document.getElementById('form').requestSubmit();`);
+      await pause(120);
+      assert.equal(await win.webContents.executeJavaScript(`!document.getElementById('dialog').open && document.querySelector('.brand-icon img').src.includes('/INTJ/')`),true);
       const layout = await win.webContents.executeJavaScript(
         `(() => { const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right};};return {view:document.body.dataset.view,width:innerWidth,height:innerHeight,bodyWidth:document.body.scrollWidth,calendar:rect('#calendar'),toolbar:rect('.planner-toolbar'),events:[...document.querySelectorAll('.event')].map(e=>({width:e.clientWidth,scrollWidth:e.scrollWidth,title:e.querySelector('strong').textContent})),dates:document.querySelectorAll('.date-choice').length}; })()`,
       );
@@ -101,6 +117,30 @@ app.whenReady().then(async () => {
           );
       }
       if (view === "week") {
+        const tools = await win.webContents.executeJavaScript(`(() => {
+          const items=[...document.querySelectorAll('.tools button,.tools .button')].map(e=>{
+            const text=[...e.childNodes].find(n=>n.nodeType===Node.TEXT_NODE && n.textContent.trim());
+            const range=document.createRange();range.selectNodeContents(text);
+            const r=range.getBoundingClientRect();
+            return {label:text.textContent.trim(),font:parseFloat(getComputedStyle(e).fontSize),width:r.width,height:r.height,overflow:e.scrollWidth>e.clientWidth};
+          });
+          return {items,legend:[...document.querySelectorAll('.legend span')].map(e=>({font:parseFloat(getComputedStyle(e).fontSize),height:e.getBoundingClientRect().height}))};
+        })()`);
+        for (const tool of tools.items) {
+          assert.ok(
+            tool.font >= 12 && tool.width > 30 && tool.height >= 12,
+            tool.label + " text is not visible",
+          );
+          assert.equal(tool.overflow, false, tool.label + " label is clipped");
+        }
+        for (const swatch of tools.legend)
+          assert.ok(
+            swatch.font >= 11 && swatch.height >= 24,
+            "Color rule text must remain visible",
+          );
+        console.log(
+          "SIDEBAR_LABELS_PASS " + tools.items.map((t) => t.label).join(" / "),
+        );
         const aligned = await win.webContents.executeJavaScript(`(() => {
           const rects = s => [...document.querySelectorAll(s)].map(e=>{const r=e.getBoundingClientRect();return {x:r.x,width:r.width};});
           return {nav:rects('.date-choice'),days:rects('.day'),todos:rects('.grid .todos')};
@@ -252,7 +292,49 @@ app.whenReady().then(async () => {
         );
       }
     }
-    console.log("UI_LAYOUT_PASS");
+    // Exercise actual Chromium keyboard events after deleting and cancelling.
+    for (const width of [1320,390]) {
+      win.setContentSize(width,900);
+      await win.loadURL('http://127.0.0.1:4173');
+      await pause(350);
+      const grip=await win.webContents.executeJavaScript(`(() => {const e=document.querySelector('.pane-splitter');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),ratio:Number(e.getAttribute('aria-valuenow'))};})()`);
+      win.webContents.sendInputEvent({type:'mouseMove',x:grip.x,y:grip.y});
+      await pause(60);
+      win.webContents.sendInputEvent({type:'mouseDown',x:grip.x,y:grip.y,button:'left',clickCount:1});
+      await pause(60);
+      win.webContents.sendInputEvent({type:'mouseMove',x:grip.x,y:grip.y-40,button:'left'});
+      await pause(60);
+      win.webContents.sendInputEvent({type:'mouseUp',x:grip.x,y:grip.y-40,button:'left',clickCount:1});
+      await pause(80);
+      console.log('DRAG',width,grip,await win.webContents.executeJavaScript(`({ratio:document.querySelector('.pane-splitter').getAttribute('aria-valuenow'),hit:document.elementFromPoint(${grip.x},${grip.y})?.className})`));
+      assert.ok(await win.webContents.executeJavaScript(`Number(document.querySelector('.pane-splitter').getAttribute('aria-valuenow'))<${grip.ratio}`),'Dragging changes the pane ratio');
+      const handle=await win.webContents.executeJavaScript(`(() => {const e=document.querySelector('.event-resize');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),id:e.closest('.event').dataset.itemId,height:parseFloat(e.closest('.event').style.height)};})()`);
+      win.webContents.sendInputEvent({type:'mouseMove',x:handle.x,y:handle.y});await pause(60);
+      win.webContents.sendInputEvent({type:'mouseDown',x:handle.x,y:handle.y,button:'left',clickCount:1});await pause(60);
+      win.webContents.sendInputEvent({type:'mouseMove',x:handle.x,y:handle.y+35,button:'left'});await pause(60);
+      win.webContents.sendInputEvent({type:'mouseUp',x:handle.x,y:handle.y+35,button:'left',clickCount:1});await pause(60);
+      const resized=await win.webContents.executeJavaScript(`parseFloat(document.querySelector('[data-item-id="${handle.id}"]').style.height)`);
+      assert.ok(Math.abs(resized-handle.height-35)<1,'Real pointer changes schedule height');
+      console.log('EVENT_RESIZE_PASS',width,handle.height,resized);
+
+      await win.webContents.executeJavaScript(`window.confirm=()=>{throw Error('删除不得调用原生 confirm')};void 0;`);
+      for (const selector of ['.event-body','.todo-body']) {
+        await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(selector)}).click();[...document.querySelectorAll('#fields button')].find(b=>b.textContent==='删除').click();document.querySelector('.delete-confirm button').click();`);
+        await win.webContents.executeJavaScript(`(() => {const t=document.querySelector('[name=title]');t.value='';t.focus();})()`);
+        win.webContents.sendInputEvent({type:'char',keyCode:'C'});
+        await pause(80);
+        assert.equal(await win.webContents.executeJavaScript(`document.querySelector('[name=title]').value`),'C');
+        await win.webContents.executeJavaScript(`[...document.querySelectorAll('#fields button')].find(b=>b.textContent==='删除').click();[...document.querySelectorAll('.delete-confirm button')].find(b=>b.textContent==='确认删除').click();`);
+        await pause(150);
+        assert.equal(await win.webContents.executeJavaScript(`document.getElementById('dialog').open`),false);
+        await win.webContents.executeJavaScript(`document.getElementById('add').click();document.querySelector('[name=title]').focus()`);
+        win.webContents.sendInputEvent({type:'char',keyCode:'K'});
+        await pause(80);
+        assert.equal(await win.webContents.executeJavaScript(`document.querySelector('[name=title]').value`),'K');
+        await win.webContents.executeJavaScript(`document.getElementById('cancel').click()`);
+      }
+    }
+    console.log("DELETE_KEYBOARD_PASS / UI_LAYOUT_PASS");
     app.exit(0);
   } catch (e) {
     console.error(e);

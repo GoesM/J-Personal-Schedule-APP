@@ -52,12 +52,20 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   let device = "a";
   let rejectPush = false;
+  let rejectBatch=false;
+  const counts={http:0,batch:0};
   global.window = {
     native: {
       invoke: async (method, args) => {
         const [p, v] = args;
         const file = typeof p === "string" ? path.join(tmp, device, p) : null;
         switch (method) {
+          case 'capabilities': return {readBatch:true};
+          case 'readBatch':
+            if(rejectBatch) throw Error('模拟批量读取失败');
+            counts.batch++;
+            assert.ok(p.length<=32);
+            return Object.fromEntries(await Promise.all(p.map(async n=>[n,(await fs.readFile(path.join(tmp,device,n))).toString('base64')])));
           case "mkdir":
             return fs.mkdir(file, { recursive: true });
           case "list":
@@ -82,6 +90,7 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
           case "rmdir":
             return fs.rmdir(file);
           case "http": {
+            counts.http++;
             if (
               rejectPush &&
               p.url.includes("git-receive-pack") &&
@@ -208,6 +217,10 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
     await synchronize(config);
     assert.equal(await store.hasPendingChanges(config), false);
     assert.equal(store.records().length, 0);
+    const baseline={...counts};
+    assert.match(await synchronize(config,false),/无需传输/);
+    assert.equal(counts.http-baseline.http,1,'无变化只查询一次远端，不fetch/push');
+    assert.equal(counts.batch-baseline.batch,0,'无变化不重载日程');
     await store.save({ title: "初始", date: "2026-09-25" });
     assert.equal(await store.hasPendingChanges(config), true);
     // Startup commits/pulls but does not upload: a clean worktree can still be pending.
@@ -222,6 +235,15 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
     await synchronize(config);
     assert.equal(await store.hasPendingChanges(config), false);
     const initial = store.records()[0];
+    // A failed post-checkout reload must not make a retry take the fast path.
+    await fs.writeFile(path.join(tmp,device,'sync-checkout'),'pending');
+    rejectBatch=true;
+    await assert.rejects(()=>synchronize(config,false),/批量读取失败/);
+    assert.equal(await fs.readFile(path.join(tmp,device,'sync-checkout'),'utf8'),'pending');
+    rejectBatch=false;
+    await synchronize(config,false);
+    assert.equal(store.records()[0].item.title,'初始');
+    assert.equal(await fs.readFile(path.join(tmp,device,'sync-checkout'),'utf8'),'done');
     device = "b";
     await store.load();
     await store.save({ title: "B离线新事项", date: "2026-09-26" });
@@ -301,6 +323,28 @@ test("无Node全局的浏览器Git产物：提交/拉取/推送与多端冲突",
     assert.equal(longConflict.item.done, true);
     assert.equal(longConflict.item.title, "长期冲突已解决");
     assert.equal((await store.exportBackup()).longTodoHeads.length, 1);
+    await store.saveCloudPersona('INFJ');
+    assert.equal(await store.hasPendingChanges(config),true);
+    await synchronize(config);
+    device='b'; await store.load(); await synchronize(config,false);
+    assert.equal(await store.cloudPersona(),'INFJ');
+    await store.saveCloudPersona('ENTJ');
+    device='a'; await store.load(); await store.saveCloudPersona('ISFJ');
+    await synchronize(config);
+    device='b'; await store.load(); await synchronize(config);
+    const mergedPersona=await store.cloudPersona();
+    device='a'; await store.load(); await synchronize(config,false);
+    assert.equal(await store.cloudPersona(),mergedPersona,'offline choices converge without Git conflicts');
+    await store.saveCloudPersona('ENFJ'); await synchronize(config);
+    device='b'; await store.load(); await synchronize(config,false);
+    assert.equal(await store.cloudPersona(),'ENFJ');
+    for(let i=0;i<70;i++) await store.save({title:'批量边界'+i,date:'2026-10-23',kind:'todo'});
+    const operationCount=(await fs.readdir(path.join(tmp,device,'repo/ops'))).filter(n=>n.endsWith('.json')).length;
+    const batchesBefore=counts.batch;
+    const recordsBefore=store.records().length;
+    await store.load();
+    assert.equal(counts.batch-batchesBefore,Math.ceil(operationCount/32));
+    assert.equal(store.records().length,recordsBefore,'跨批次读取不丢事项');
   } finally {
     await new Promise((r) => server.close(r));
   }

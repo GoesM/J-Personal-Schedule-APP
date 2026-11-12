@@ -2,6 +2,7 @@ package cn.goesm.jcalendar;
 
 import android.app.*;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.*;
@@ -27,6 +28,26 @@ public class MainActivity extends Activity {
   private ValueCallback<Uri[]> fileCallback;
   private String exportText;
   private String exportId;
+  private static final String[] PERSONAS = {"INTJ","ENTJ","INFJ","ENFJ","ISTJ","ESTJ","ISFJ","ESFJ"};
+
+  private JSONObject appearance() throws Exception {
+    return new JSONObject().put("persona", getSharedPreferences("appearance", MODE_PRIVATE).getString("persona", "ISTJ")).put("platform", "android");
+  }
+
+  private JSONObject saveAppearance(String id) throws Exception {
+    if (!Arrays.asList(PERSONAS).contains(id)) throw new IllegalArgumentException("未知人物图标");
+    PackageManager manager = getPackageManager();
+    // Enable destination first: a launcher entry remains available even if interrupted.
+    manager.setComponentEnabledSetting(new ComponentName(this, getPackageName() + ".Icon" + id),
+      PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
+    for (String other : PERSONAS) {
+      if (!other.equals(id)) manager.setComponentEnabledSetting(new ComponentName(this, getPackageName() + ".Icon" + other),
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+    }
+    if (!getSharedPreferences("appearance", MODE_PRIVATE).edit().putString("persona", id).commit())
+      throw new IOException("图标设置保存失败，请重试");
+    return appearance();
+  }
 
   public void onCreate(Bundle state) {
     super.onCreate(state);
@@ -292,6 +313,20 @@ public class MainActivity extends Activity {
     String p = a.optString(0);
     File f;
     switch (m) {
+      case "capabilities":
+        return new JSONObject().put("readBatch", true);
+      case "readBatch": {
+        JSONArray paths = a.getJSONArray(0);
+        if (paths.length() > 32) throw new IOException("批量读取上限32个文件");
+        JSONObject result = new JSONObject();
+        for (int i=0; i<paths.length(); i++) {
+          String name = paths.getString(i);
+          File entry = file(name);
+          if (!entry.exists()) throw new IOException("ENOENT " + name);
+          result.put(name, encode(Files.readAllBytes(entry.toPath())));
+        }
+        return result;
+      }
       case "read":
         f = file(p);
         if (!f.exists()) throw new IOException("ENOENT " + p);
@@ -337,6 +372,10 @@ public class MainActivity extends Activity {
           .put("gid", 0);
       case "settings":
         return settings();
+      case "appearance":
+        return appearance();
+      case "saveAppearance":
+        return saveAppearance(p);
       case "saveSettings":
         saveSettings(a.getJSONObject(0));
         return null;

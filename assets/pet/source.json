@@ -1,0 +1,10 @@
+{
+  "source": "J人形象设计/pet",
+  "version": "1.0.0",
+  "sha256": {
+    "pet-data.js": "c45e4d4e1cd158709cb24f416d4bed39191594c6c2bf3133a66dd0f0267f53c3",
+    "pet-runtime.js": "176ba0d6d641bf043318f6594f90a5b2e1c3804eb9080cf449190dd6a602c7e1",
+    "manifest.json": "f490a7a22a0e38231fdcb3d22589bd40f898f2a641992e9168db3739310c7686",
+    "NOTICE.md": "79f685e42909e7f2fd9d718b3caa93145dfa1b78f2eb6b2d86b683ef1f396f41"
+  }
+}

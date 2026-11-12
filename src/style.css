@@ -108,6 +108,19 @@ h3 {
   align-items: center;
   gap: 10px;
 }
+.delete-confirm { flex-basis: 100%; padding: 12px; border: 1px solid #e5c7c7; border-radius: 10px; background: #fff5f3; }
+.delete-confirm p { margin: 0 0 10px; }
+.delete-confirm button { margin-right: 8px; }
+.brand-icon img { width: 100%; height: 100%; object-fit: contain; }
+.persona-picker { grid-column: 1 / -1; border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.persona-picker legend { padding: 0 0 16px; font-weight: 600; }
+.persona-picker label { position: relative; display: flex; align-items: center; flex-direction: column; gap: 5px; padding: 12px 4px; border: 2px solid #e4e9e7; border-radius: 14px; cursor: pointer; background: #fff; }
+.persona-picker label:has(input:checked) { border-color: #287b70; background: #edf7f2; }
+.persona-picker label:focus-within { outline: 3px solid #9cc9bf; outline-offset: 2px; }
+.persona-picker input { position: absolute; top: 7px; right: 7px; width: 15px; height: 15px; accent-color: #287b70; }
+.persona-picker span { font-size: 12px; color: #667672; }
+.persona-shortcut { grid-column: 1 / -1; }
+@media(max-width: 480px) { .persona-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .brand-icon {
   display: grid;
   place-items: center;
@@ -1353,6 +1366,14 @@ body[data-view="week"] .date-choice {
   text-align: center;
   font-size: 10px;
 }
+.pane-splitter { grid-column: 1 / -1; height: 16px; cursor: row-resize; touch-action: none; background: #e4efec; position: relative; flex-shrink:0; }
+.pane-splitter::after { content:''; position:absolute; width:44px; height:4px; border-radius:4px; background:#91b2a9; top:6px; left:calc(50% - 22px); }
+.pane-splitter:focus-visible { outline:2px solid #287b70; outline-offset:-2px; }
+.todo-heading { grid-column:1 / -1; background:#f5f7f7; margin:0; padding:14px 0; }
+.todo-heading h3,.overview-heading h3 { font-size:16px; font-weight:650; margin:0; }
+.agenda-timeline { overflow-y:auto; }
+.agenda .event { min-height:0; overflow:hidden; flex-shrink:0; }
+.overview .event { min-height:0; overflow:hidden; padding:5px; border-bottom:3px solid #fff; border-radius:5px; }
 .timed-scroll {
   grid-column: 1 / -1;
   overflow-y: auto;
@@ -1377,10 +1398,13 @@ body[data-view="week"] .date-choice {
   background: var(--line);
 }
 .overview .todos {
+  padding: 6px;
   max-height: 210px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
+.overview .todo { padding:7px 5px; gap:5px; }
+.overview .todo .check-toggle { width:17px; height:17px; min-width:17px; padding:0; }
 .mobile-pages {
   display: none;
 }
@@ -1517,52 +1541,63 @@ body[data-view="week"] .date-choice {
 }
 @media (min-width: 760px) {
   body {
-    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-columns: 208px minmax(0, 1fr);
   }
   .sidebar {
-    padding: 24px 12px 18px;
-    align-items: center;
-    gap: 26px;
-    overflow: visible;
+    padding: 24px 16px 18px;
+    align-items: stretch;
+    gap: 20px;
+    overflow: auto;
   }
   .brand > div,
-  #summary,
   .tools-title,
   .sidebar-note {
+    display: block;
+  }
+  #summary {
     display: none;
   }
   .tools {
     width: 100%;
-    gap: 9px;
+    gap: 4px;
   }
   .tools button,
   .tools .button {
-    font-size: 0;
+    font-size: 13px;
     min-height: 43px;
-    padding: 10px;
-    justify-content: center;
+    padding: 10px 8px;
+    gap: 10px;
+    justify-content: flex-start;
   }
   .tools span {
-    font-size: 22px;
-    width: auto;
+    font-size: 19px;
+    width: 19px;
+    flex-shrink: 0;
   }
   #conflicts::before {
     content: "⇄";
-    font-size: 22px;
+    font-size: 19px;
+    width: 19px;
+    text-align: center;
+    flex-shrink: 0;
     color: var(--teal);
   }
   .legend {
-    margin-top: auto;
+    margin-top: 8px;
     width: 100%;
   }
   .legend .eyebrow {
-    display: none;
+    display: block;
   }
   .legend span {
-    font-size: 0;
-    height: 10px;
-    padding: 0;
-    border-radius: 3px;
+    font-size: 11px;
+    height: auto;
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+  .planner-layout {
+    grid-template-columns: minmax(0, 1fr) 276px;
+    gap: 18px;
   }
   .schedule-add-cell {
     padding: 6px;
@@ -1575,12 +1610,17 @@ body[data-view="week"] .date-choice {
     max-width: 180px;
   }
 }
+@media (min-width: 760px) and (max-width: 1350px) {
+  :root {
+    --day-width: 94px;
+  }
+}
 @media (min-width: 760px) and (max-width: 1100px) {
   .workspace {
     padding: 18px 16px;
   }
   .planner-layout {
-    grid-template-columns: minmax(0, 1fr) 264px;
+    grid-template-columns: minmax(0, 1fr) 250px;
     gap: 15px;
   }
   #long-pane {
@@ -1723,3 +1763,21 @@ body[data-view="week"] .date-choice {
     font-size: 10px;
   }
 }
+.adaptive-grid { position:relative; }
+.idle-gap { position:absolute; left:var(--axis-width, 50px); right:0; height:32px; z-index:3; border:0; border-top:1px dashed #bccfcd; border-bottom:1px dashed #bccfcd; border-radius:0; background:#eff6f4; color:#577772; font-size:11px; padding:3px 8px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.idle-gap:hover { background:#e0efeb; }
+.time-scale-toggle { font-size:11px; padding:5px 9px; color:var(--teal); white-space:nowrap; margin-left:auto; }
+.section-heading:has(.time-scale-toggle) { flex-wrap:wrap; gap:8px; }
+.agenda .adaptive-grid .day .event { position:absolute; margin:0; min-height:0; box-sizing:border-box; overflow:hidden; }
+
+/* Resize handle stays outside the scrollable text area of each card. */
+.event-resize { position:absolute; bottom:0; left:0; width:100%; height:16px; padding:0; border:0; border-radius:0; background:#ffffff80; color:#557872; cursor:ns-resize; touch-action:none; line-height:12px; z-index:2; }
+.adaptive-grid .event { padding-bottom:20px; overflow:hidden; }
+.adaptive-grid .event-body { min-height:0; overflow:auto; }
+.event-resize:hover,.event-resize:focus-visible { background:#c9e5df; }
+
+.idle-gap { cursor:default; display:flex; align-items:center; justify-content:center; }
+.idle-gap:hover { background:#eff6f4; }
+
+/* Empty clock ranges are a quiet break, not a row of content. */
+.idle-gap, .idle-gap:hover { height:6px; padding:0; border:0; background:linear-gradient(to bottom,transparent 2px,#d6e4e0 2px,#d6e4e0 3px,transparent 3px); }

@@ -10,7 +10,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'"
     />
-    <title>J人小程序</title>
+    <title>J人日程APP</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -19,7 +19,7 @@
       <div class="brand">
         <span class="brand-icon">J</span>
         <div>
-          <h1>J人小程序</h1>
+          <h1>J人日程APP</h1>
           <p>把每一天，安排得刚刚好。</p>
         </div>
         <button id="menu-close" aria-label="关闭菜单">×</button>
@@ -27,6 +27,7 @@
       <div id="summary"></div>
       <p class="eyebrow tools-title">我的工具</p>
       <nav class="tools">
+        <button id="appearance"><span>◈</span>个性化图标</button>
         <button id="settings"><span>⚙</span>设置与同步配置</button
         ><button id="help"><span>?</span>操作指南</button
         ><button id="backup"><span>↓</span>导出备份</button
@@ -36,7 +37,6 @@
             id="import"
             accept=".json"
             hidden /></label
-        ><button id="trash"><span>↺</span>回收站</button
         ><button id="conflicts">版本冲突 (0)</button>
         <button id="quit"><span>↗</span>退出程序</button>
       </nav>
@@ -60,7 +60,7 @@
     <div class="workspace">
       <header class="topbar">
         <div class="page-title">
-          <span class="eyebrow">J人小程序 · PERSONAL PLANNER</span>
+          <span class="eyebrow">J人日程APP · PERSONAL PLANNER</span>
           <h2 id="period-title"></h2>
         </div>
         <div class="header-actions">
@@ -98,6 +98,7 @@
           ><button id="add" class="primary">＋ 新建</button>
         </div>
       </header>
+      <p id="status" role="status" aria-live="polite"></p>
       <nav class="mobile-pages" aria-label="页面切换">
         <button id="page-daily" aria-pressed="true">每日安排</button>
         <button id="page-long" aria-pressed="false">
@@ -124,7 +125,6 @@
             </div>
           </section>
           <div id="date-nav"></div>
-          <p id="status" role="status" aria-live="polite"></p>
           <main id="calendar" aria-label="日程与待办"></main>
         </section>
         <aside id="long-pane" aria-label="长期TODO清单"></aside>

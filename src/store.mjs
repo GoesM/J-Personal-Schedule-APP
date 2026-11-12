@@ -1,9 +1,16 @@
 import { materialize } from "./model.mjs";
 import { createLongStore } from "./long-store.mjs";
+import { createAppearanceStore } from './appearance-store.mjs';
 const bridge = window.native;
+export const bridgeMetrics = { calls: 0, readBytes: 0, httpBytes: 0 };
 export const call = async (method, ...args) => {
+  bridgeMetrics.calls++;
   try {
-    return await bridge.invoke(method, args);
+    const result = await bridge.invoke(method, args);
+    if (method === 'read') bridgeMetrics.readBytes += Math.floor((result?.length || 0) * 3 / 4);
+    if (method === 'readBatch') bridgeMetrics.readBytes += Object.values(result).reduce((n,s)=>n+Math.floor(s.length*3/4),0);
+    if (method === 'http') bridgeMetrics.httpBytes += Math.floor(((result?.body?.length || 0) + (args[0]?.body?.length || 0))*3/4);
+    return result;
   } catch (e) {
     if (e.message.includes("ENOENT")) e.code = "ENOENT";
     throw e;
@@ -63,6 +70,16 @@ export const hasActiveWrites = () => writes > 0;
 export const freeze = (value) => {
   frozen = value;
 };
+const appearanceStore=createAppearanceStore({
+  read:p=>fs.promises.readFile(p,'utf8'), write:(p,v)=>fs.promises.writeFile(p,v),
+  list:p=>fs.promises.readdir(p), mkdir:p=>fs.promises.mkdir(p),
+});
+export const cloudPersona=()=>appearanceStore.read();
+export async function saveCloudPersona(value) {
+  if(frozen) throw Error('同步中，请完成后再保存');
+  writes++;
+  try { await appearanceStore.save(value); } finally { writes--; }
+}
 const longStore = createLongStore({
   readJson: async (path) =>
     JSON.parse(new TextDecoder().decode(from64(await call("read", path)))),
@@ -110,14 +127,21 @@ function validate(o) {
     throw Error("日程时间格式不正确");
 }
 export async function load() {
+  await call('mkdir','/repo/preferences');
   await call("mkdir", "/repo/ops");
   const next = [];
-  for (const f of await call("list", "/repo/ops"))
-    if (f.endsWith(".json")) {
+  const names = (await call('list','/repo/ops')).filter(f=>f.endsWith('.json'));
+  // Bound each bridge response; old hosts/tests retain the single-read fallback.
+  let batchSupported = false;
+  try { batchSupported = !!(await call('capabilities'))?.readBatch; } catch {}
+  for (let offset=0; offset<names.length; offset+=32) {
+    const group=names.slice(offset,offset+32);
+    const batch=batchSupported ? await call('readBatch',group.map(f=>'/repo/ops/'+f)) : null;
+    for (const f of group) {
       try {
         const o = JSON.parse(
           new TextDecoder().decode(
-            from64(await call("read", "/repo/ops/" + f)),
+            from64(batch ? batch['/repo/ops/'+f] : await call("read", "/repo/ops/" + f)),
           ),
         );
         validate(o);
@@ -126,10 +150,17 @@ export async function load() {
         throw Error("数据文件损坏：" + f + " " + e.message);
       }
     }
+  }
   operations = next;
   await longStore.load();
 }
 export async function save(item, previous, deleted = false) {
+  const result=await persistItem(item,previous,deleted);
+  const effect=deleted?null:item.done&&!previous?.item.done?'celebrate':!previous&&!item.done&&['todo','longtodo'].includes(item.kind)?'added':null;
+  if(typeof window.dispatchEvent==='function'&&typeof CustomEvent==='function')window.dispatchEvent(new CustomEvent('item-saved',{detail:{effect}}));
+  return result;
+}
+async function persistItem(item, previous, deleted = false) {
   if (frozen) throw Error("同步中，请完成后再保存");
   writes++;
   try {
@@ -141,7 +172,7 @@ export async function save(item, previous, deleted = false) {
       itemId: previous?.id || crypto.randomUUID(),
       parents: previous?.versions.map((x) => x.id) || [],
       at: new Date().toISOString(),
-      item,
+      item: deleted ? {title:'已删除',kind:item.kind||'todo',date:'1970-01-01',start:'',end:''} : item,
       deleted,
     };
     await call(

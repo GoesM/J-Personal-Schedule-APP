@@ -250,7 +250,7 @@ export function createLongStore(io) {
         ],
         at: time,
         item: {
-          ...item,
+          ...(deleted ? {title:'已删除',notes:'',ddl:'',done:false} : item),
           kind: "longtodo",
           date: "",
           start: "",

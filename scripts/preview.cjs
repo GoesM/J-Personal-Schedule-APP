@@ -46,7 +46,9 @@ const bridge = `
   files.set('/repo/longtodo/'+longDevice+'/index.json',encode(JSON.stringify({format:'j-longtodo-v2',heads:longIndex})));
   files.set('/repo/longtodo/'+longDevice+'/active.json',encode(JSON.stringify({format:'j-longtodo-v2',operations:active})));
   files.set('/repo/longtodo/'+longDevice+'/completed/2026-05.json',encode(JSON.stringify({format:'j-longtodo-v2',operations:completed})));
-  window.native={invoke:async(method,args)=>{const [p,v]=args;switch(method){case 'settings':return {};case 'mkdir':dirs.add(p);return;case 'list':return [...files.keys(),...dirs].filter(x=>x.startsWith(p+'/')&&!x.slice(p.length+1).includes('/')).map(x=>x.slice(p.length+1));case 'read':if(!files.has(p))throw Error('ENOENT');return files.get(p);case 'write':files.set(p,v);return;case 'ready':return;case 'export':return true;case 'saveSettings':throw Error('预览模式不保存真实仓库凭据');default:throw Error('预览模式不执行远程同步');}}};
+  let persona = localStorage.getItem('demo-persona') || 'ISTJ';
+  const appearance=()=>({persona, platform:innerWidth<760?'android':'windows'});
+  window.native={invoke:async(method,args)=>{const [p,v]=args;switch(method){case 'appearance':return appearance();case 'saveAppearance':persona=p;localStorage.setItem('demo-persona',p);return appearance();case 'personaShortcut':return '预览模式 · 未创建真实快捷方式';case 'settings':return {};case 'mkdir':dirs.add(p);return;case 'list':return [...files.keys(),...dirs].filter(x=>x.startsWith(p+'/')&&!x.slice(p.length+1).includes('/')).map(x=>x.slice(p.length+1));case 'read':if(!files.has(p))throw Error('ENOENT');return files.get(p);case 'write':files.set(p,v);return;case 'ready':return;case 'export':return true;case 'saveSettings':throw Error('预览模式不保存真实仓库凭据');default:throw Error('预览模式不执行远程同步');}}};
 })();`;
 const root = path.resolve("dist");
 http
@@ -58,7 +60,7 @@ http
       return;
     }
     const name = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-    if (!["index.html", "app.js", "style.css"].includes(name)) {
+    if (!["index.html", "app.js", "style.css"].includes(name) && !/^personas\/(INTJ|ENTJ|INFJ|ENFJ|ISTJ|ESTJ|ISFJ|ESFJ)\/icon-256\.png$/.test(name)) {
       res.writeHead(404);
       res.end();
       return;
@@ -73,7 +75,7 @@ http
         );
     res.setHeader(
       "Content-Type",
-      name.endsWith(".html")
+      name.endsWith('.png') ? 'image/png' : name.endsWith(".html")
         ? "text/html; charset=utf-8"
         : name.endsWith(".css")
           ? "text/css; charset=utf-8"
